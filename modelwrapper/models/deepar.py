@@ -12,13 +12,12 @@ import pickle
 
 class DeepAR:
 
-    def __init__(self, dataset, groups, start_date):
+    def __init__(self, dataset, groups):
         self.dataset = dataset
         self.groups = groups
-        self.start_date = start_date
         self.stat_cat_cardinalities = [v for k, v in self.groups['train']['groups_n'].items()]
         self.stat_cat = np.concatenate(([v.reshape(-1, 1) for k, v in self.groups['train']['groups_idx'].items()]), axis=1)
-        self.dates = [self.start_date for _ in range(self.groups['predict']['s'])]
+        self.dates = groups['dates']
 
     def _build_train_ds(self):
         train_target_values = self.groups['train']['data'].T

@@ -2,7 +2,6 @@ import unittest
 import tsaugmentation as tsag
 from modelwrapper.models.deepar import DeepAR
 import shutil
-import pandas as pd
 
 
 class TestModel(unittest.TestCase):
@@ -13,8 +12,7 @@ class TestModel(unittest.TestCase):
         self.s = self.data['train']['s']
         shutil.rmtree("./original_datasets")
         shutil.rmtree("./transformed_datasets")
-        self.start_date = pd.Timestamp("2005-03-01", freq='1Q')
-        self.deepar = DeepAR(dataset='prison', groups=self.data, start_date=self.start_date)
+        self.deepar = DeepAR(dataset='prison', groups=self.data)
 
     def test_correct_train(self):
         model = self.deepar.train(epochs=10)
