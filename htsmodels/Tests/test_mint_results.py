@@ -1,6 +1,6 @@
 import unittest
 import tsaugmentation as tsag
-from modelwrapper.models.mint import MinT
+from htsmodels.models.mint import MinT
 import shutil
 
 

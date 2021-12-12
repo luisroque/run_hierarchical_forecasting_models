@@ -1,6 +1,6 @@
 import unittest
 import tsaugmentation as tsag
-from modelwrapper.models.deepar import DeepAR
+from htsmodels.models.deepar import DeepAR
 import shutil
 
 

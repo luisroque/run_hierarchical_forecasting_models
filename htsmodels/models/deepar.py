@@ -5,7 +5,7 @@ from gluonts.mx.distribution.neg_binomial import NegativeBinomialOutput
 from gluonts.mx.trainer import Trainer
 from gluonts.evaluation.backtest import make_evaluation_predictions
 from tqdm import tqdm
-from modelwrapper.results.calculate_metrics import calculate_metrics
+from htsmodels.results.calculate_metrics import calculate_metrics
 import numpy as np
 import pickle
 

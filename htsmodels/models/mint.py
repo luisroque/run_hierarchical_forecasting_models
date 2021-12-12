@@ -5,7 +5,7 @@ from rpy2.robjects import pandas2ri
 import rpy2.robjects as ro
 from rpy2.robjects.conversion import localconverter
 import numpy as np
-from modelwrapper.results.calculate_metrics import calculate_metrics
+from htsmodels.results.calculate_metrics import calculate_metrics
 import pickle
 
 
