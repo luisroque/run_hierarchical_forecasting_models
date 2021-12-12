@@ -14,7 +14,6 @@ class MinT:
     def __init__(self, dataset, groups):
         self.dataset = dataset
         self.groups = groups
-
         dict_groups = {k.capitalize(): np.tile(groups['train']['groups_names'][k][groups['train']['groups_idx'][k]],
                                                (groups['predict']['n'], 1)).T.reshape(-1, ) for k in
                        [k for k, v in groups['train']['groups_n'].items()]}
@@ -61,7 +60,6 @@ class MinT:
 
         pred = pred_mint['.mean'].to_numpy().reshape(s, h).T
         pred_complete = np.concatenate((np.zeros((n, s)), pred), axis=0)[np.newaxis, :, :]
-
         return pred_complete
 
     def store_metrics(self, res):
