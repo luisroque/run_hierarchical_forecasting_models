@@ -17,16 +17,46 @@ class MinT:
         dict_groups = {k.capitalize(): np.tile(groups['train']['groups_names'][k][groups['train']['groups_idx'][k]],
                                                (groups['predict']['n'], 1)).T.reshape(-1, ) for k in
                        [k for k, v in groups['train']['groups_n'].items()]}
-        dict_groups['Count'] = groups['predict']['data']
+        groups['predict']['data_matrix'][:groups['train']['n'],:] = groups['train']['data']
+        dict_groups['Count'] = groups['predict']['data_matrix'].T.reshape(-1,)
         dict_groups['Date'] = np.tile(np.array(groups['dates']), (groups['train']['s'],))
         self.df = pd.DataFrame(dict_groups)
 
     def train(self):
-        r = robjects.r
-        script_dir = os.path.dirname(__file__)
-        rel_path = "prison_hts_function.R"
-        abs_file_path = os.path.join(script_dir, rel_path)
-        r['source'](abs_file_path)
+        robjects.r('''
+            library('fpp3')
+            prison_results <- function(df) {
+              prison <- df %>%
+                mutate(Quarter = yearquarter(Date)) %>%
+                select(-Date)  %>%
+                as_tsibble(key = c(Gender, Legal, State), index = Quarter) %>%
+                relocate(Quarter)
+              
+              prison_gts <- prison %>%
+                aggregate_key(Gender * Legal * State, Count = sum(Count)/1e3)
+              
+              fit <- prison_gts %>%
+                filter(year(Quarter) <= 2014) %>%
+                model(base = ETS(Count)) %>%
+                reconcile(
+                  bottom_up = bottom_up(base),
+                  MinT = min_trace(base, method = "mint_shrink")
+                )
+              fc <- fit %>% forecast(h = 8)
+              
+              fc_csv = fc %>% 
+                as_tibble %>% 
+                filter(.model=='MinT') %>% 
+                select(-Count) %>% 
+                mutate(.mean=.mean*1e3) %>%
+                mutate(.mean=(sprintf("%0.2f", .mean))) %>%
+                rename(time=Quarter) %>%
+                lapply(as.character) %>% 
+                data.frame(stringsAsFactors=FALSE)
+              
+              return (fc_csv)
+            }
+        ''')
         function_r = robjects.globalenv['prison_results']
         with localconverter(ro.default_converter + pandas2ri.converter):
             df_r = ro.conversion.py2rpy(self.df)
