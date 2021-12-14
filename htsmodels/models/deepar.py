@@ -17,7 +17,17 @@ class DeepAR:
         self.groups = groups
         self.stat_cat_cardinalities = [v for k, v in self.groups['train']['groups_n'].items()]
         self.stat_cat = np.concatenate(([v.reshape(-1, 1) for k, v in self.groups['train']['groups_idx'].items()]), axis=1)
-        self.dates = groups['dates']
+        self.dates = [groups['dates'][0] for _ in range(groups['train']['s'])]
+
+        time_interval = (self.groups['dates'][1] - self.groups['dates'][0]).days
+        if time_interval < 8:
+            self.time_int = 'W'
+        elif time_interval < 32:
+            self.time_int = 'M'
+        elif time_interval < 93:
+            self.time_int = 'Q'
+        elif time_interval < 367:
+            self.time_int = 'Y'
 
     def _build_train_ds(self):
         train_target_values = self.groups['train']['data'].T
@@ -31,7 +41,7 @@ class DeepAR:
             for (target, start, fsc) in zip(train_target_values,
                                             self.dates,
                                             self.stat_cat)
-        ], freq="Q")
+        ], freq=self.time_int)
 
         return train_ds
 
@@ -47,7 +57,7 @@ class DeepAR:
             for (target, start, fsc) in zip(test_target_values,
                                             self.dates,
                                             self.stat_cat)
-        ], freq="Q")
+        ], freq=self.time_int)
 
         return test_ds
 
@@ -56,7 +66,7 @@ class DeepAR:
 
         estimator = DeepAREstimator(
             prediction_length=self.groups['h'],
-            freq="Q",
+            freq=self.time_int,
             distr_output=NegativeBinomialOutput(),
             use_feat_dynamic_real=False,
             use_feat_static_cat=True,
