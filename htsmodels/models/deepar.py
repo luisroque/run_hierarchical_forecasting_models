@@ -103,7 +103,6 @@ class DeepAR:
 
         res = np.concatenate((np.zeros((self.groups['train']['s'], n_samples, self.groups['train']['n']), dtype=np.float64), res), axis=2)
         res = np.transpose(res, (1, 2, 0))
-
         return res
 
     def store_metrics(self, res):
