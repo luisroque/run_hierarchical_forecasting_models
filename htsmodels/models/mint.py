@@ -11,7 +11,7 @@ import pickle
 
 class MinT:
 
-    def __init__(self, dataset, groups):
+    def __init__(self, dataset, groups, aggregate_key=None):
         self.dataset = dataset
         self.groups = groups
         dict_groups = {k.capitalize(): np.tile(groups['train']['groups_names'][k][groups['train']['groups_idx'][k]],
@@ -22,45 +22,77 @@ class MinT:
         dict_groups['Date'] = np.tile(np.array(groups['dates']), (groups['train']['s'],))
         self.df = pd.DataFrame(dict_groups)
 
+        time_interval = (self.groups['dates'][1] - self.groups['dates'][0]).days
+        if time_interval < 8:
+            self.time_int = 'week'
+        elif time_interval < 32:
+            self.time_int = 'month'
+        elif time_interval < 93:
+            self.time_int = 'quarter'
+        elif time_interval < 367:
+            self.time_int = 'year'
+
+        self.last_train_date = (self.groups['dates'][self.groups['train']['n']-1]).strftime("%Y-%m-%d")
+        if aggregate_key:
+            self.aggregate_key = aggregate_key
+        else:
+            # Default is to assume that there is a group structure (e.g. State * Gender)
+            # and no direct hierarchy (e.g. State / Region)
+            self.aggregate_key = ' * '.join([k.capitalize() for k in self.groups['train']['groups_names']])
+
     def train(self):
         robjects.r('''
             library('fpp3')
-            prison_results <- function(df) {
-              prison <- df %>%
-                mutate(Quarter = yearquarter(Date)) %>%
-                select(-Date)  %>%
-                as_tsibble(key = c(Gender, Legal, State), index = Quarter) %>%
-                relocate(Quarter)
+            results_fn <- function(df, time, h, string_aggregate, start_predict_date) {
+              if (time == 'quarter') {
+                fn = yearquarter
+              } else if (time == 'month') {
+                fn = yearmonth
+              } else if (time == 'week') {
+                fn = yearweek
+              } else if (time == 'year') {
+                fn = year
+              } 
+              data <- df %>%
+                mutate(Time = fn(Date)) %>%
+                select(-Date) %>%
+                as_tsibble(key = colnames(df)[2:length(colnames(df))-2], index = Time) %>%
+                relocate(Time)
               
-              prison_gts <- prison %>%
-                aggregate_key(Gender * Legal * State, Count = sum(Count)/1e3)
+              data_gts <- data %>%
+                aggregate_key(.spec = !!rlang::parse_expr(string_aggregate), Count = sum(Count))
               
-              fit <- prison_gts %>%
-                filter(year(Quarter) <= 2014) %>%
+              fit <- data_gts %>%
+                filter(Time <= fn(as.Date(start_predict_date))) %>%
                 model(base = ETS(Count)) %>%
                 reconcile(
                   bottom_up = bottom_up(base),
                   MinT = min_trace(base, method = "mint_shrink")
                 )
-              fc <- fit %>% forecast(h = 8)
+              fc <- fit %>% forecast(h = h)
               
               fc_csv = fc %>% 
                 as_tibble %>% 
                 filter(.model=='MinT') %>% 
                 select(-Count) %>% 
-                mutate(.mean=.mean*1e3) %>%
+                mutate(.mean=.mean) %>%
                 mutate(.mean=(sprintf("%0.2f", .mean))) %>%
-                rename(time=Quarter) %>%
+                rename(time=Time) %>%
                 lapply(as.character) %>% 
                 data.frame(stringsAsFactors=FALSE)
               
               return (fc_csv)
             }
         ''')
-        function_r = robjects.globalenv['prison_results']
+        function_r = robjects.globalenv['results_fn']
         with localconverter(ro.default_converter + pandas2ri.converter):
             df_r = ro.conversion.py2rpy(self.df)
-        df_result_r = function_r(df_r)
+
+        df_result_r = function_r(df_r,
+                                 self.time_int,
+                                 self.groups['h'],
+                                 self.aggregate_key,
+                                 self.last_train_date)
         with localconverter(ro.default_converter + pandas2ri.converter):
             df_result = ro.conversion.rpy2py(df_result_r)
         df_result[['.mean']] = df_result[['.mean']].astype('float')
