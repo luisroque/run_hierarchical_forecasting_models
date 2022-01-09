@@ -1,4 +1,3 @@
-import os
 import pandas as pd
 import rpy2.robjects as robjects
 from rpy2.robjects import pandas2ri
@@ -7,13 +6,16 @@ from rpy2.robjects.conversion import localconverter
 import numpy as np
 from htsmodels.results.calculate_metrics import calculate_metrics
 import pickle
+from pathlib import Path
 
 
 class MinT:
 
-    def __init__(self, dataset, groups, aggregate_key=None):
+    def __init__(self, dataset, groups, aggregate_key=None, input_dir='./'):
         self.dataset = dataset
         self.groups = groups
+        self.input_dir = input_dir
+        self._create_directories()
         dict_groups = {k.capitalize(): np.tile(groups['train']['groups_names'][k][groups['train']['groups_idx'][k]],
                                                (groups['predict']['n'], 1)).T.reshape(-1, ) for k in
                        [k for k, v in groups['train']['groups_n'].items()]}
@@ -39,6 +41,10 @@ class MinT:
             # Default is to assume that there is a group structure (e.g. State * Gender)
             # and no direct hierarchy (e.g. State / Region)
             self.aggregate_key = ' * '.join([k.capitalize() for k in self.groups['train']['groups_names']])
+
+    def _create_directories(self):
+        # Create directory to store results if does not exist
+        Path(f'{self.input_dir}results').mkdir(parents=True, exist_ok=True)
 
     def train(self):
         robjects.r('''
@@ -125,7 +131,7 @@ class MinT:
         return pred_complete
 
     def store_metrics(self, res):
-        with open(f'results_gp_cov_{self.dataset}.pickle', 'wb') as handle:
+        with open(f'{self.input_dir}results/results_gp_cov_{self.dataset}.pickle', 'wb') as handle:
             pickle.dump(res, handle, pickle.HIGHEST_PROTOCOL)
 
     def metrics(self, mean):

@@ -8,13 +8,16 @@ from tqdm import tqdm
 from htsmodels.results.calculate_metrics import calculate_metrics
 import numpy as np
 import pickle
+from pathlib import Path
 
 
 class DeepAR:
 
-    def __init__(self, dataset, groups):
+    def __init__(self, dataset, groups, input_dir='./'):
         self.dataset = dataset
         self.groups = groups
+        self.input_dir = input_dir
+        self._create_directories()
         self.stat_cat_cardinalities = [v for k, v in self.groups['train']['groups_n'].items()]
         self.stat_cat = np.concatenate(([v.reshape(-1, 1) for k, v in self.groups['train']['groups_idx'].items()]), axis=1)
         self.dates = [groups['dates'][0] for _ in range(groups['train']['s'])]
@@ -28,6 +31,10 @@ class DeepAR:
             self.time_int = 'Q'
         elif time_interval < 367:
             self.time_int = 'Y'
+
+    def _create_directories(self):
+        # Create directory to store results if does not exist
+        Path(f'{self.input_dir}results').mkdir(parents=True, exist_ok=True)
 
     def _build_train_ds(self):
         train_target_values = self.groups['train']['data'].T
@@ -106,7 +113,7 @@ class DeepAR:
         return res
 
     def store_metrics(self, res):
-        with open(f'results_gp_cov_{self.dataset}.pickle', 'wb') as handle:
+        with open(f'{self.input_dir}results/results_gp_cov_{self.dataset}.pickle', 'wb') as handle:
             pickle.dump(res, handle, pickle.HIGHEST_PROTOCOL)
 
     def metrics(self, mean):
