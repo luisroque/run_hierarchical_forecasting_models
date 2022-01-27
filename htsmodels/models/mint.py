@@ -105,22 +105,20 @@ class MinT:
         return df_result
 
     def results(self, pred_mint):
-        groups_names = pred_mint.columns[:-3]
-        for group in groups_names:
-            pred_mint = pred_mint.loc[(pred_mint[group] != '<aggregated>')]
+        for group in self.groups['train']['groups_names']:
+            pred_mint = pred_mint.loc[(pred_mint[group.capitalize()] != '<aggregated>')]
             sort_group = pd.unique(
-                self.groups['train']['groups_names'][group.lower()][self.groups['train']['groups_idx'][group.lower()]])
-            pred_mint[group] = pred_mint[group].astype("category")
+                self.groups['train']['groups_names'][group][self.groups['train']['groups_idx'][group]])
+            pred_mint[group] = pred_mint[group.capitalize()].astype("category")
             pred_mint[group].cat.set_categories(sort_group, inplace=True)
 
-        pred_mint = pred_mint.sort_values([k.title() for k in self.groups['train']['groups_names']])
-
+        pred_mint = pred_mint.sort_values([k.title().capitalize() for k in self.groups['train']['groups_names']])
         pred_mint = pred_mint.reset_index().drop('index', axis=1)
 
-        for group in groups_names:
+        for group in self.groups['train']['groups_names']:
             # Assert order is correct between original dataset and predictions
-            np.testing.assert_array_equal(pd.unique(pred_mint[group]), pd.unique(
-                self.groups['train']['groups_names'][group.lower()][self.groups['train']['groups_idx'][group.lower()]]))
+            np.testing.assert_array_equal(pd.unique(pred_mint[group.capitalize()]), pd.unique(
+                self.groups['train']['groups_names'][group][self.groups['train']['groups_idx'][group]]))
 
         h = self.groups['h']
         s = self.groups['train']['s']
