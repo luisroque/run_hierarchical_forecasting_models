@@ -14,6 +14,10 @@ class MinT:
     def __init__(self, dataset, groups, aggregate_key=None, input_dir='./'):
         self.dataset = dataset
         self.groups = groups
+        # Ensure that keys are capitalized for every dataset
+        self.groups['train']['groups_names'] = self._get_capitalized_keys(self.groups['train']['groups_names'])
+        self.groups['train']['groups_idx'] = self._get_capitalized_keys(self.groups['train']['groups_idx'])
+        self.groups['train']['groups_n'] = self._get_capitalized_keys(self.groups['train']['groups_n'])
         self.input_dir = input_dir
         self._create_directories()
         dict_groups = {k.capitalize(): np.tile(groups['train']['groups_names'][k][groups['train']['groups_idx'][k]],
@@ -104,28 +108,45 @@ class MinT:
         df_result[['.mean']] = df_result[['.mean']].astype('float')
         return df_result
 
+    @staticmethod
+    def sort_dataframe(df, columns_to_sort, express_filter_from_lines, indexes_dict):
+        # filter from lines
+        df = df[(df != express_filter_from_lines).all(axis=1)]
+        # change the columns to categories data type
+        for col in columns_to_sort:
+            df = df.copy()
+            df[col] = df[col].astype("category")
+            df[col].cat.set_categories(indexes_dict[col], inplace=True)
+        # sort values for all of the columns
+        df = df.sort_values(columns_to_sort)
+        df = df.reset_index().drop('index', axis=1)
+
+        return df
+
+    @staticmethod
+    def _get_capitalized_keys(dict_to_capitalize):
+        indexes_dict = {}
+        for k, v in dict_to_capitalize.items():
+            # ensure that groups names are capitalized
+            indexes_dict[k.capitalize()] = v
+        return indexes_dict
+
     def results(self, pred_mint):
-        for group in self.groups['train']['groups_names']:
-            pred_mint = pred_mint.loc[(pred_mint[group.capitalize()] != '<aggregated>')]
-            sort_group = pd.unique(
-                self.groups['train']['groups_names'][group][self.groups['train']['groups_idx'][group]])
-            pred_mint[group] = pred_mint[group.capitalize()].astype("category")
-            pred_mint[group].cat.set_categories(sort_group, inplace=True)
+        indexes_dict = self.groups['train']['groups_names']
+        columns_to_sort = list(indexes_dict.keys())
+        # Dataframe received from R needs to be in the same order as the original dataset
+        df = self.sort_dataframe(pred_mint, columns_to_sort, '<aggregated>', indexes_dict)
 
-        pred_mint = pred_mint.sort_values([k.title().capitalize() for k in self.groups['train']['groups_names']])
-        pred_mint = pred_mint.reset_index().drop('index', axis=1)
+        # Assert order is correct between original dataset and predictions
+        # Should be in the unit tests folder, but to avoid messing with the API
+        # it is here for now
+        for group in indexes_dict.keys():
+            np.testing.assert_array_equal(list(pd.unique(df[group])),
+                                          list(self.groups['train']['groups_names'][group]))
 
-        for group in self.groups['train']['groups_names']:
-            # Assert order is correct between original dataset and predictions
-            np.testing.assert_array_equal(pd.unique(pred_mint[group.capitalize()]), pd.unique(
-                self.groups['train']['groups_names'][group][self.groups['train']['groups_idx'][group]]))
-
-        h = self.groups['h']
-        s = self.groups['train']['s']
-        n = self.groups['train']['n']
-
-        pred = pred_mint['.mean'].to_numpy().reshape(s, h).T
-        pred_complete = np.concatenate((np.zeros((n, s)), pred), axis=0)[np.newaxis, :, :]
+        pred = df['.mean'].to_numpy().reshape(self.groups['train']['s'], self.groups['h']).T
+        pred_complete = np.concatenate((np.zeros((self.groups['train']['n'],
+                                                  self.groups['train']['s'])), pred), axis=0)[np.newaxis, :, :]
         return pred_complete
 
     def store_metrics(self, res):
