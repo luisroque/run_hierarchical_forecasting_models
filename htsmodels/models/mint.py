@@ -7,6 +7,7 @@ import numpy as np
 from htsmodels.results.calculate_metrics import calculate_metrics
 import pickle
 from pathlib import Path
+from datetime import datetime
 
 
 class MinT:
@@ -23,7 +24,7 @@ class MinT:
         dict_groups = {k.capitalize(): np.tile(groups['train']['groups_names'][k][groups['train']['groups_idx'][k]],
                                                (groups['predict']['n'], 1)).T.reshape(-1, ) for k in
                        [k for k, v in groups['train']['groups_n'].items()]}
-        groups['predict']['data_matrix'][:groups['train']['n'],:] = groups['train']['data']
+        groups['predict']['data_matrix'][:groups['train']['n'], :] = groups['train']['data']
         dict_groups['Count'] = groups['predict']['data_matrix'].T.reshape(-1,)
         dict_groups['Date'] = np.tile(np.array(groups['dates']), (groups['train']['s'],))
         self.df = pd.DataFrame(dict_groups)
@@ -109,21 +110,6 @@ class MinT:
         return df_result
 
     @staticmethod
-    def sort_dataframe(df, columns_to_sort, express_filter_from_lines, indexes_dict):
-        # filter from lines
-        df = df[(df != express_filter_from_lines).all(axis=1)]
-        # change the columns to categories data type
-        for col in columns_to_sort:
-            df = df.copy()
-            df[col] = df[col].astype("category")
-            df[col].cat.set_categories(indexes_dict[col], inplace=True)
-        # sort values for all of the columns
-        df = df.sort_values(columns_to_sort)
-        df = df.reset_index().drop('index', axis=1)
-
-        return df
-
-    @staticmethod
     def _get_capitalized_keys(dict_to_capitalize):
         indexes_dict = {}
         for k, v in dict_to_capitalize.items():
@@ -132,19 +118,25 @@ class MinT:
         return indexes_dict
 
     def results(self, pred_mint):
-        indexes_dict = self.groups['train']['groups_names']
-        columns_to_sort = list(indexes_dict.keys())
-        # Dataframe received from R needs to be in the same order as the original dataset
-        df = self.sort_dataframe(pred_mint, columns_to_sort, '<aggregated>', indexes_dict)
+        cols = list(self.groups['train']['groups_names'].keys())
 
-        # Assert order is correct between original dataset and predictions
-        # Should be in the unit tests folder, but to avoid messing with the API
-        # it is here for now
-        for group in indexes_dict.keys():
-            np.testing.assert_array_equal(list(pd.unique(df[group])),
-                                          list(self.groups['train']['groups_names'][group]))
+        if self.time_int == 'week':
+            pred_mint['Date'] = pred_mint['time'].apply(lambda x: datetime.strptime(x + str(0), '%Y W%W%w')
+                                                        .strftime('%Y-%m-%d')).apply(pd.to_datetime)
+        elif self.time_int == 'month':
+            pred_mint['Date'] = pred_mint['time'].apply(lambda x: datetime.strptime(x, '%Y %b')
+                                                        .strftime('%Y-%m-%d')).apply(pd.to_datetime)
+        elif self.time_int == 'quarter':
+            pred_mint['Date'] = pd.PeriodIndex(pred_mint['time'].str.replace(' ', '-'), freq='Q').to_timestamp()
+        elif self.time_int == 'year':
+            pred_mint['Date'] = pd.PeriodIndex(pred_mint['time'], freq='Y').to_timestamp()
 
-        pred = df['.mean'].to_numpy().reshape(self.groups['train']['s'], self.groups['h']).T
+        cols.append('Date')
+        res_joined = self.df.merge(pred_mint, how='left', on=cols)
+
+        # Filter only the predictions
+        res_joined = res_joined[res_joined['Date'] > self.last_train_date]
+        pred = res_joined['.mean'].to_numpy().reshape(self.groups['train']['s'], self.groups['h']).T
         pred_complete = np.concatenate((np.zeros((self.groups['train']['n'],
                                                   self.groups['train']['s'])), pred), axis=0)[np.newaxis, :, :]
         return pred_complete
