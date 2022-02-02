@@ -30,7 +30,9 @@ class MinT:
         self.df = pd.DataFrame(dict_groups)
 
         time_interval = (self.groups['dates'][1] - self.groups['dates'][0]).days
-        if time_interval < 8:
+        if time_interval < 2:
+            self.time_int = 'day'
+        elif time_interval < 8:
             self.time_int = 'week'
         elif time_interval < 32:
             self.time_int = 'month'
@@ -63,6 +65,8 @@ class MinT:
                 fn = yearweek
               } else if (time == 'year') {
                 fn = year
+              } else if (time == 'day') {
+                fn = ymd
               } 
               data <- df %>%
                 mutate(Time = fn(Date)) %>%
@@ -120,7 +124,9 @@ class MinT:
     def results(self, pred_mint):
         cols = list(self.groups['train']['groups_names'].keys())
 
-        if self.time_int == 'week':
+        if self.time_int == 'day':
+            pred_mint['Date'] = pred_mint['time']
+        elif self.time_int == 'week':
             pred_mint['Date'] = pred_mint['time'].apply(lambda x: datetime.strptime(x + str(0), '%Y W%W%w')
                                                         .strftime('%Y-%m-%d')).apply(pd.to_datetime)
         elif self.time_int == 'month':
@@ -132,6 +138,12 @@ class MinT:
             pred_mint['Date'] = pd.PeriodIndex(pred_mint['time'], freq='Y').to_timestamp()
 
         cols.append('Date')
+        # Zip can sometimes have the dtype int and breaks
+        pred_mint = pred_mint.astype({'Zip': 'object'})
+        self.df = self.df.astype({'Zip': 'object'})
+        pred_mint['Date'] = pd.to_datetime(pred_mint['Date'])
+        self.df['Date'] = pd.to_datetime(self.df['Date'])
+
         res_joined = self.df.merge(pred_mint, how='left', on=cols)
 
         # Filter only the predictions
