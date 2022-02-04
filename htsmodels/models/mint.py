@@ -139,8 +139,8 @@ class MinT:
 
         cols.append('Date')
         # Zip can sometimes have the dtype int and breaks
-        pred_mint = pred_mint.astype({'Zip': 'string'})
-        self.df = self.df.astype({'Zip': 'string'})
+        pred_mint = pred_mint.astype({k: 'string' for k in cols})
+        self.df = self.df.astype({k: 'string' for k in cols})
         pred_mint['Date'] = pd.to_datetime(pred_mint['Date'])
         self.df['Date'] = pd.to_datetime(self.df['Date'])
 
