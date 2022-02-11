@@ -5,10 +5,11 @@ from gluonts.mx.distribution.neg_binomial import NegativeBinomialOutput
 from gluonts.mx.trainer import Trainer
 from gluonts.evaluation.backtest import make_evaluation_predictions
 from tqdm import tqdm
-from htsmodels.results.calculate_metrics import calculate_metrics
+from htsmodels.results.calculate_metrics import CalculateStoreResults
 import numpy as np
 import pickle
 from pathlib import Path
+import time
 
 
 class DeepAR:
@@ -16,6 +17,12 @@ class DeepAR:
     def __init__(self, dataset, groups, input_dir='./'):
         self.dataset = dataset
         self.groups = groups
+        self.timer_start = time.time()
+        self.wall_time_preprocess = None
+        self.wall_time_build_model = None
+        self.wall_time_train = None
+        self.wall_time_predict = None
+        self.wall_time_total = None
         self.input_dir = input_dir
         self._create_directories()
         self.stat_cat_cardinalities = [v for k, v in self.groups['train']['groups_n'].items()]
@@ -69,7 +76,10 @@ class DeepAR:
         return test_ds
 
     def train(self, lr=1e-3, epochs=100):
+        self.wall_time_preprocess = time.time() - self.timer_start
         train_ds = self._build_train_ds()
+        self.wall_time_build_model = time.time() - self.wall_time_preprocess
+
 
         estimator = DeepAREstimator(
             prediction_length=self.groups['h'],
@@ -87,6 +97,7 @@ class DeepAR:
         )
 
         model = estimator.train(train_ds)
+        self.wall_time_train = time.time() - self.wall_time_build_model
         return model
 
     def predict(self, model):
@@ -100,6 +111,7 @@ class DeepAR:
 
         print("Obtaining time series predictions ...")
         forecasts = list(tqdm(forecast_it, total=len(test_ds)))
+        self.wall_time_predict = time.time() - self.wall_time_train
 
         return forecasts
 
@@ -117,5 +129,14 @@ class DeepAR:
             pickle.dump(res, handle, pickle.HIGHEST_PROTOCOL)
 
     def metrics(self, mean):
-        res = calculate_metrics(mean, self.groups)
+        calc_results = CalculateStoreResults(mean, self.groups)
+        res = calc_results.calculate_metrics()
+        self.wall_time_total = time.time() - self.wall_time_predict
+
+        res['wall_time'] = {}
+        res['wall_time']['wall_time_preprocess'] = self.wall_time_preprocess
+        res['wall_time']['wall_time_build_model'] = self.wall_time_build_model
+        res['wall_time']['wall_time_train'] = self.wall_time_train
+        res['wall_time']['wall_time_predict'] = self.wall_time_predict
+        res['wall_time']['wall_time_total'] = self.wall_time_total
         return res

@@ -2,102 +2,118 @@ import numpy as np
 from sklearn.metrics import mean_squared_error
 
 
-def mase(n, seas, h, y, f):
-    return np.mean(((n - seas) / h
-                    * (np.sum(np.abs(y[n:n + h, :] - f), axis=0)
-                       / np.sum(np.abs(y[seas:n, :] - y[:n - seas, :]), axis=0))))
+class CalculateStoreResults:
+    """Calculate the results and store them using pickle files
 
+    Currently we have implemented MASE and RMSE.
 
-def calculate_metrics(pred_samples,
-                      groups):
-    pred_s0 = pred_samples.shape[0]
-    pred_s1 = pred_samples.shape[1]
-    pred_s2 = pred_samples.shape[2]
+    Attributes:
+        pred_samples (array): predictions of shape [number of samples, h, number of series]
+            - we transform it immediately to the shape [h, number of series] by averaging over the samples
+        groups (obj): dict containing the data and several other attributes of the dataset
 
-    pred_samples = pred_samples.reshape(pred_s0, pred_s1 * pred_s2, order='F')
+    """
 
-    seasonality = groups['seasonality']
-    h = groups['h']
+    def __init__(self, pred_samples, groups):
+        self.groups = groups
+        self.seas = self.groups['seasonality']
+        self.h = self.groups['h']
+        self.n = self.groups['predict']['n']
+        self.s = self.groups['predict']['s']
+        self.pred_samples = np.mean(pred_samples, axis=0).reshape(self.n, self.s)[self.n - self.h:self.n, :]
+        self.y_f = self.groups['predict']['data'].reshape(self.s, self.n).T
+        self.errs = ['mase', 'rmse']
+        self.levels = list(self.groups['predict']['groups_names'].keys())
+        self.levels.extend(('bottom', 'total'))
 
-    n = groups['predict']['n']
-    s = groups['predict']['s']
-    y_f = groups['predict']['data'].reshape(s, n).T
+    def mase(self, y, f):
+        """Calculates the Mean Absolute Scaled Error
 
-    y_all_g = {}
-    f_all_g = {}
+        Args:
+            param y (array): original series values shape=[n,s]
+            param f (array): predictions shape=[h,s]
 
-    mase_ = {}
-    rmse_ = {}
+        Returns:
+            MASE (array): shape=[s,]
 
-    # Bottom
-    y_all_g['bottom'] = y_f
-    f_all_g['bottom'] = np.mean(pred_samples, axis=0).reshape(s, n).T[n - h:n, :]
+        """
+        return ((self.n - self.seas) / self.h * (np.sum(np.abs(y[self.n - self.h:self.n, :] - f), axis=0)
+                                                 / np.sum(np.abs(y[self.seas:self.n, :] - y[:self.n - self.seas, :]),
+                                                          axis=0)))
 
-    mase_['bottom'] = np.round(mase(n=n - h,
-                                    seas=seasonality,
-                                    h=h,
-                                    y=y_f,
-                                    f=np.mean(pred_samples, axis=0).reshape(s, n).T[n - h:n, :]), 3)
-    rmse_['bottom'] = np.round(
-        mean_squared_error(y_f[n - h:n, :], np.mean(pred_samples, axis=0).reshape(s, n).T[n - h:n, :], squared=False),
-        3)
+    def calculate_metrics_for_individual_group(self, group_name, y, predictions, error_metrics):
+        """Calculates the main metrics for each group
 
-    # Total
-    y_all_g['total'] = np.sum(y_f, axis=1).reshape(-1, 1)
-    f_all_g['total'] = np.sum(np.mean(pred_samples, axis=0).reshape(s, n).T[n - h:n, :], axis=1).reshape(-1, 1)
+        Args:
+            param group_name: group that we want to calculate the error metrics
+            param y: original series values with the granularity of the group to calculate
+            param predictions: predictions with the granularity of the group to calculate
+            param error_metrics: dict to add new results
 
-    mase_['total'] = np.round(mase(n=n - h,
-                                   seas=seasonality,
-                                   h=h,
-                                   y=np.sum(y_f, axis=1).reshape(-1, 1),
-                                   f=np.sum(np.mean(pred_samples, axis=0).reshape(s, n).T[n - h:n, :], axis=1).reshape(
-                                       -1, 1))
-                              , 3)
-    rmse_['total'] = np.round(mean_squared_error(np.sum(y_f, axis=1).reshape(-1, 1)[n - h:n, :],
-                                                 np.sum(np.mean(pred_samples, axis=0).reshape(s, n).T[n - h:n, :],
-                                                        axis=1).reshape(-1, 1),
-                                                 squared=False), 3)
+        Returns:
+            error (obj): contains both the error metric for each individual series of each group and the average
 
-    # Groups
-    idx_dict_new = {}
-    for group in list(groups['predict']['groups_names'].keys()):
-        y_g = np.zeros((groups['predict']['n'], groups['predict']['groups_names'][group].shape[0]))
-        f_g = np.zeros((h, groups['predict']['groups_names'][group].shape[0]))
+        """
+        error_metrics['mase'][f'{group_name}_ind'] = np.round(self.mase(y=y,
+                                                                        f=predictions), 3)
+        error_metrics['mase'][f'{group_name}'] = np.round(np.mean(error_metrics['mase'][f'{group_name}_ind']), 3)
+        error_metrics['rmse'][f'{group_name}_ind'] = np.round(mean_squared_error(y[self.n - self.h:self.n, :],
+                                                              predictions,
+                                                              squared=False,
+                                                              multioutput='raw_values'),
+                                                              3)
+        error_metrics['rmse'][f'{group_name}'] = np.round(np.mean(error_metrics['rmse'][f'{group_name}_ind']), 3)
 
-        for idx, name in enumerate(groups['predict']['groups_names'][group]):
-            g_n = groups['predict']['groups_n'][group]
+        return error_metrics
 
-            idx_dict_new[name] = np.where(groups['predict']['groups_idx'][group] == idx, 1, 0)
+    def calculate_metrics(self):
+        """Aggregates the results for all the groups
 
-            y_g[:, idx] = np.sum(idx_dict_new[name] * y_f, axis=1)
-            f_g[:, idx] = np.sum(idx_dict_new[name] * np.mean(pred_samples, axis=0).reshape(s, n).T, axis=1)[n - h:n]
+        Returns:
+            error (obj): - contains all the error metric for each individual series of each group and the average
+                         - contains all the predictions for all the series and groups
 
-        y_all_g[group] = np.sum(y_g, axis=1).reshape(-1, 1)
-        f_all_g[group] = np.sum(f_g, axis=1).reshape(-1, 1)
+        """
+        error_metrics = dict()
+        error_metrics['mase'] = {}
+        error_metrics['rmse'] = {}
+        error_metrics['predictions'] = {}
 
-        mase_[group] = np.round(mase(n=n - h,
-                                     seas=seasonality,
-                                     h=h,
-                                     y=y_g,
-                                     f=f_g)
-                                , 3)
+        error_metrics = self.calculate_metrics_for_individual_group('bottom',
+                                                                    self.y_f,
+                                                                    self.pred_samples,
+                                                                    error_metrics)
+        error_metrics['predictions']['bottom'] = self.pred_samples
+        error_metrics = self.calculate_metrics_for_individual_group('total',
+                                                                    np.sum(self.y_f, axis=1).reshape(-1, 1),
+                                                                    np.sum(self.pred_samples, axis=1).reshape(-1, 1),
+                                                                    error_metrics)
+        error_metrics['predictions']['total'] = np.sum(self.pred_samples, axis=1).reshape(-1, 1)
+        # All the groups present in the data
+        idx_dict_new = dict()
+        for group in list(self.groups['predict']['groups_names'].keys()):
+            y_g = np.zeros((self.groups['predict']['n'], self.groups['predict']['groups_names'][group].shape[0]))
+            f_g = np.zeros((self.h, self.groups['predict']['groups_names'][group].shape[0]))
 
-        rmse_[group] = np.round(mean_squared_error(y_g[n - h:n, :], f_g, squared=False), 3)
+            for idx, name in enumerate(self.groups['predict']['groups_names'][group]):
+                idx_dict_new[name] = np.where(self.groups['predict']['groups_idx'][group] == idx, 1, 0)
 
-    # All
-    y_all = np.concatenate([y_all_g[x] for x in y_all_g], 1)
-    f_all = np.concatenate([f_all_g[x] for x in f_all_g], 1)
+                y_g[:, idx] = np.sum(idx_dict_new[name] * self.y_f, axis=1)
+                f_g[:, idx] = np.sum(idx_dict_new[name] * self.pred_samples, axis=1)
+                error_metrics['predictions'][name] = np.sum(idx_dict_new[name] * self.pred_samples, axis=1)
 
-    mase_['all'] = np.round(mase(n=n - h,
-                                 seas=seasonality,
-                                 h=h,
-                                 y=y_all,
-                                 f=f_all), 3)
-    rmse_['all'] = np.round(mean_squared_error(y_all[n - h:n, :], f_all, squared=False), 3)
+            error_metrics = self.calculate_metrics_for_individual_group(group,
+                                                                        y_g,
+                                                                        f_g,
+                                                                        error_metrics)
+            error_metrics['predictions'][group] = np.sum(f_g, axis=1)
+            list(self.groups['predict']['groups_names'].keys())
+        for err in self.errs:
+            error_metrics[err]['all_ind'] = np.concatenate([error_metrics[err][f'{x}_ind'] for x in
+                                                            self.levels],
+                                                           0)
+            error_metrics[err]['all'] = np.mean(error_metrics[err]['all_ind'])
 
-    results = {}
-    results['mase'] = mase_
-    results['rmse'] = rmse_
-    return results
+        return error_metrics
 
 

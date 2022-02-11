@@ -4,10 +4,11 @@ from rpy2.robjects import pandas2ri
 import rpy2.robjects as ro
 from rpy2.robjects.conversion import localconverter
 import numpy as np
-from htsmodels.results.calculate_metrics import calculate_metrics
+from htsmodels.results.calculate_metrics import CalculateStoreResults
 import pickle
 from pathlib import Path
 from datetime import datetime
+import time
 
 
 class MinT:
@@ -15,6 +16,12 @@ class MinT:
     def __init__(self, dataset, groups, aggregate_key=None, input_dir='./'):
         self.dataset = dataset
         self.groups = groups
+        self.timer_start = time.time()
+        self.wall_time_preprocess = None
+        self.wall_time_build_model = None
+        self.wall_time_train = None
+        self.wall_time_predict = None
+        self.wall_time_total = None
         # Ensure that keys are capitalized for every dataset
         self.groups['train']['groups_names'] = self._get_capitalized_keys(self.groups['train']['groups_names'])
         self.groups['train']['groups_idx'] = self._get_capitalized_keys(self.groups['train']['groups_idx'])
@@ -54,6 +61,7 @@ class MinT:
         Path(f'{self.input_dir}results').mkdir(parents=True, exist_ok=True)
 
     def train(self):
+        self.wall_time_preprocess = time.time() - self.timer_start
         robjects.r('''
             library('fpp3')
             results_fn <- function(df, time, h, string_aggregate, start_predict_date) {
@@ -111,6 +119,9 @@ class MinT:
         with localconverter(ro.default_converter + pandas2ri.converter):
             df_result = ro.conversion.rpy2py(df_result_r)
         df_result[['.mean']] = df_result[['.mean']].astype('float')
+        self.wall_time_build_model = time.time() - self.wall_time_preprocess
+        self.wall_time_train = time.time() - self.wall_time_build_model
+        self.wall_time_predict = time.time() - self.wall_time_train
         return df_result
 
     @staticmethod
@@ -158,5 +169,14 @@ class MinT:
             pickle.dump(res, handle, pickle.HIGHEST_PROTOCOL)
 
     def metrics(self, mean):
-        res = calculate_metrics(mean, self.groups)
+        calc_results = CalculateStoreResults(mean, self.groups)
+        res = calc_results.calculate_metrics()
+        self.wall_time_total = time.time() - self.wall_time_predict
+
+        res['wall_time'] = {}
+        res['wall_time']['wall_time_preprocess'] = self.wall_time_preprocess
+        res['wall_time']['wall_time_build_model'] = self.wall_time_build_model
+        res['wall_time']['wall_time_train'] = self.wall_time_train
+        res['wall_time']['wall_time_predict'] = self.wall_time_predict
+        res['wall_time']['wall_time_total'] = self.wall_time_total
         return res
