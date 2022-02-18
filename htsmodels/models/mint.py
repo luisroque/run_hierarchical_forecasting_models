@@ -119,9 +119,9 @@ class MinT:
         with localconverter(ro.default_converter + pandas2ri.converter):
             df_result = ro.conversion.rpy2py(df_result_r)
         df_result[['.mean']] = df_result[['.mean']].astype('float')
-        self.wall_time_build_model = time.time() - self.wall_time_preprocess
-        self.wall_time_train = time.time() - self.wall_time_build_model
-        self.wall_time_predict = time.time() - self.wall_time_train
+        self.wall_time_build_model = time.time() - self.timer_start - self.wall_time_preprocess
+        self.wall_time_train = time.time() - self.timer_start - self.wall_time_build_model
+        self.wall_time_predict = time.time() - self.timer_start - self.wall_time_train
         return df_result
 
     @staticmethod
@@ -171,7 +171,7 @@ class MinT:
     def metrics(self, mean):
         calc_results = CalculateStoreResults(mean, self.groups)
         res = calc_results.calculate_metrics()
-        self.wall_time_total = time.time() - self.wall_time_predict
+        self.wall_time_total = time.time() - self.timer_start
 
         res['wall_time'] = {}
         res['wall_time']['wall_time_preprocess'] = self.wall_time_preprocess

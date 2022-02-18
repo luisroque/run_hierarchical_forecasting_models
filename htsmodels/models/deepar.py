@@ -78,7 +78,7 @@ class DeepAR:
     def train(self, lr=1e-3, epochs=100):
         self.wall_time_preprocess = time.time() - self.timer_start
         train_ds = self._build_train_ds()
-        self.wall_time_build_model = time.time() - self.wall_time_preprocess
+        self.wall_time_build_model = time.time() - self.timer_start - self.wall_time_preprocess
 
 
         estimator = DeepAREstimator(
@@ -97,7 +97,7 @@ class DeepAR:
         )
 
         model = estimator.train(train_ds)
-        self.wall_time_train = time.time() - self.wall_time_build_model
+        self.wall_time_train = time.time() - self.timer_start - self.wall_time_build_model
         return model
 
     def predict(self, model):
@@ -111,7 +111,7 @@ class DeepAR:
 
         print("Obtaining time series predictions ...")
         forecasts = list(tqdm(forecast_it, total=len(test_ds)))
-        self.wall_time_predict = time.time() - self.wall_time_train
+        self.wall_time_predict = time.time() - self.timer_start - self.wall_time_train
 
         return forecasts
 
@@ -131,7 +131,7 @@ class DeepAR:
     def metrics(self, mean):
         calc_results = CalculateStoreResults(mean, self.groups)
         res = calc_results.calculate_metrics()
-        self.wall_time_total = time.time() - self.wall_time_predict
+        self.wall_time_total = time.time() - self.timer_start
 
         res['wall_time'] = {}
         res['wall_time']['wall_time_preprocess'] = self.wall_time_preprocess
