@@ -31,3 +31,9 @@ class TestModel(unittest.TestCase):
         results = self.mint.results(forecasts)
         res = self.mint.metrics(results)
         self.assertLess(res['mase']['bottom'], 2.2)
+
+    def test_wall_time(self):
+        forecasts = self.mint.train()
+        results = self.mint.results(forecasts)
+        res = self.mint.metrics(results)
+        self.assertLess(res['wall_time']['wall_time_total'], 50)
