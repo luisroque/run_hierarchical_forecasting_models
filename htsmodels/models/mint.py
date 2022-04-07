@@ -95,9 +95,14 @@ class MinT:
               fc <- fit %>% forecast(h = h)
               
               fc_csv = fc %>% 
+                # getting the 95% interval
+                hilo(level = 95) %>%
+                unpack_hilo('95%') %>% 
                 as_tibble %>% 
                 filter(.model=='MinT') %>% 
                 select(-Count) %>% 
+                rename(lower='95%_lower') %>%
+                rename(upper='95%_upper') %>%
                 mutate(.mean=.mean) %>%
                 mutate(.mean=(sprintf("%0.2f", .mean))) %>%
                 rename(time=Time) %>%
@@ -119,6 +124,8 @@ class MinT:
         with localconverter(ro.default_converter + pandas2ri.converter):
             df_result = ro.conversion.rpy2py(df_result_r)
         df_result[['.mean']] = df_result[['.mean']].astype('float')
+        df_result[['lower']] = df_result[['lower']].astype('float')
+        df_result[['upper']] = df_result[['upper']].astype('float')
         self.wall_time_build_model = time.time() - self.timer_start - self.wall_time_preprocess
         self.wall_time_train = time.time() - self.timer_start - self.wall_time_build_model
         self.wall_time_predict = time.time() - self.timer_start - self.wall_time_train
