@@ -95,9 +95,14 @@ class MinT:
               fc <- fit %>% forecast(h = h)
               
               fc_csv = fc %>% 
+                # getting the 95% interval
+                hilo(level = 95) %>%
+                unpack_hilo('95%') %>% 
                 as_tibble %>% 
                 filter(.model=='MinT') %>% 
                 select(-Count) %>% 
+                rename(lower='95%_lower') %>%
+                rename(upper='95%_upper') %>%
                 mutate(.mean=.mean) %>%
                 mutate(.mean=(sprintf("%0.2f", .mean))) %>%
                 rename(time=Time) %>%
@@ -119,6 +124,8 @@ class MinT:
         with localconverter(ro.default_converter + pandas2ri.converter):
             df_result = ro.conversion.rpy2py(df_result_r)
         df_result[['.mean']] = df_result[['.mean']].astype('float')
+        df_result[['lower']] = df_result[['lower']].astype('float')
+        df_result[['upper']] = df_result[['upper']].astype('float')
         self.wall_time_build_model = time.time() - self.timer_start - self.wall_time_preprocess
         self.wall_time_train = time.time() - self.timer_start - self.wall_time_build_model
         self.wall_time_predict = time.time() - self.timer_start - self.wall_time_train
@@ -160,19 +167,29 @@ class MinT:
         # Filter only the predictions
         res_joined = res_joined[res_joined['Date'] > self.last_train_date]
         pred = res_joined['.mean'].to_numpy().reshape(self.groups['train']['s'], self.groups['h']).T
+        lower = res_joined['lower'].to_numpy().reshape(self.groups['train']['s'], self.groups['h']).T
+        upper = res_joined['lower'].to_numpy().reshape(self.groups['train']['s'], self.groups['h']).T
         pred_complete = np.concatenate((np.zeros((self.groups['train']['n'],
                                                   self.groups['train']['s'])), pred), axis=0)[np.newaxis, :, :]
-        return pred_complete
+        lower_complete = np.concatenate((np.zeros((self.groups['train']['n'],
+                                                  self.groups['train']['s'])), lower), axis=0)[np.newaxis, :, :]
+        upper_complete = np.concatenate((np.zeros((self.groups['train']['n'],
+                                                  self.groups['train']['s'])), upper), axis=0)[np.newaxis, :, :]
+
+        return pred_complete, lower_complete, upper_complete
 
     def store_metrics(self, res):
         with open(f'{self.input_dir}results/results_gp_cov_{self.dataset}.pickle', 'wb') as handle:
             pickle.dump(res, handle, pickle.HIGHEST_PROTOCOL)
 
-    def metrics(self, mean):
+    def metrics(self, mean, lower, upper):
         calc_results = CalculateStoreResults(mean, self.groups)
         res = calc_results.calculate_metrics()
         self.wall_time_total = time.time() - self.timer_start
 
+        res['mean'] = mean
+        res['lower'] = lower
+        res['upper'] = upper
         res['wall_time'] = {}
         res['wall_time']['wall_time_preprocess'] = self.wall_time_preprocess
         res['wall_time']['wall_time_build_model'] = self.wall_time_build_model
