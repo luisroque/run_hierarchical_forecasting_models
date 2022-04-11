@@ -122,17 +122,23 @@ class DeepAR:
 
         res = np.concatenate((np.zeros((self.groups['train']['s'], n_samples, self.groups['train']['n']), dtype=np.float64), res), axis=2)
         res = np.transpose(res, (1, 2, 0))
-        return res
+        mean = np.percentile(res, 50, axis=0)[np.newaxis, :, :]
+        lower = np.percentile(res, 2.5, axis=0)[np.newaxis, :, :]
+        upper = np.percentile(res, 97.5, axis=0)[np.newaxis, :, :]
+        return mean, lower, upper
 
     def store_metrics(self, res):
         with open(f'{self.input_dir}results/results_gp_cov_{self.dataset}.pickle', 'wb') as handle:
             pickle.dump(res, handle, pickle.HIGHEST_PROTOCOL)
 
-    def metrics(self, mean):
+    def metrics(self, mean, lower, upper):
         calc_results = CalculateStoreResults(mean, self.groups)
         res = calc_results.calculate_metrics()
         self.wall_time_total = time.time() - self.timer_start
 
+        res['mean'] = mean
+        res['lower'] = lower
+        res['upper'] = upper
         res['wall_time'] = {}
         res['wall_time']['wall_time_preprocess'] = self.wall_time_preprocess
         res['wall_time']['wall_time_build_model'] = self.wall_time_build_model

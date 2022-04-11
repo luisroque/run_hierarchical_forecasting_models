@@ -167,19 +167,29 @@ class MinT:
         # Filter only the predictions
         res_joined = res_joined[res_joined['Date'] > self.last_train_date]
         pred = res_joined['.mean'].to_numpy().reshape(self.groups['train']['s'], self.groups['h']).T
+        lower = res_joined['lower'].to_numpy().reshape(self.groups['train']['s'], self.groups['h']).T
+        upper = res_joined['lower'].to_numpy().reshape(self.groups['train']['s'], self.groups['h']).T
         pred_complete = np.concatenate((np.zeros((self.groups['train']['n'],
                                                   self.groups['train']['s'])), pred), axis=0)[np.newaxis, :, :]
-        return pred_complete
+        lower_complete = np.concatenate((np.zeros((self.groups['train']['n'],
+                                                  self.groups['train']['s'])), lower), axis=0)[np.newaxis, :, :]
+        upper_complete = np.concatenate((np.zeros((self.groups['train']['n'],
+                                                  self.groups['train']['s'])), upper), axis=0)[np.newaxis, :, :]
+
+        return pred_complete, lower_complete, upper_complete
 
     def store_metrics(self, res):
         with open(f'{self.input_dir}results/results_gp_cov_{self.dataset}.pickle', 'wb') as handle:
             pickle.dump(res, handle, pickle.HIGHEST_PROTOCOL)
 
-    def metrics(self, mean):
+    def metrics(self, mean, lower, upper):
         calc_results = CalculateStoreResults(mean, self.groups)
         res = calc_results.calculate_metrics()
         self.wall_time_total = time.time() - self.timer_start
 
+        res['mean'] = mean
+        res['lower'] = lower
+        res['upper'] = upper
         res['wall_time'] = {}
         res['wall_time']['wall_time_preprocess'] = self.wall_time_preprocess
         res['wall_time']['wall_time_build_model'] = self.wall_time_build_model
