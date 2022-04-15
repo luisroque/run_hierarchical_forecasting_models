@@ -7,7 +7,7 @@ import shutil
 class TestModel(unittest.TestCase):
 
     def setUp(self):
-        self.preproc = tsag.preprocessing.PreprocessDatasets('tourism', test_size=228*10)
+        self.preproc = tsag.preprocessing.PreprocessDatasets('tourism', test_size=228*3)
         self.data = self.preproc._tourism()
         self.n = self.data['predict']['n']
         self.s = self.data['train']['s']
@@ -19,8 +19,8 @@ class TestModel(unittest.TestCase):
 
     def test_results_mean_and_prediction_interval(self):
         forecasts = self.mint.train()
-        mean, lower, upper = self.mint.results(forecasts)
-        res = self.mint.metrics(mean, lower, upper)
+        df_results = self.mint.results(forecasts)
+        res = self.mint.metrics(df_results)
         self.assertTrue(res['mean'].shape == (1, self.n, self.s))
         self.assertTrue(res['lower'].shape == (1, self.n, self.s))
         self.assertTrue(res['upper'].shape == (1, self.n, self.s))

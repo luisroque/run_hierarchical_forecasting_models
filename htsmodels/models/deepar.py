@@ -5,7 +5,7 @@ from gluonts.mx.distribution.neg_binomial import NegativeBinomialOutput
 from gluonts.mx.trainer import Trainer
 from gluonts.evaluation.backtest import make_evaluation_predictions
 from tqdm import tqdm
-from htsmodels.results.calculate_metrics import CalculateStoreResults
+from htsmodels.results.calculate_metrics import CalculateResultsBottomUp
 import numpy as np
 import pickle
 from pathlib import Path
@@ -132,7 +132,7 @@ class DeepAR:
             pickle.dump(res, handle, pickle.HIGHEST_PROTOCOL)
 
     def metrics(self, mean, lower, upper):
-        calc_results = CalculateStoreResults(mean, self.groups)
+        calc_results = CalculateResultsBottomUp(mean, self.groups)
         res = calc_results.calculate_metrics()
         self.wall_time_total = time.time() - self.timer_start
 

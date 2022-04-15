@@ -2,7 +2,7 @@ import numpy as np
 from sklearn.metrics import mean_squared_error
 
 
-class CalculateStoreResults:
+class CalculateResultsBase:
     """Calculate the results and store them using pickle files
 
     Currently we have implemented MASE and RMSE.
@@ -14,13 +14,12 @@ class CalculateStoreResults:
 
     """
 
-    def __init__(self, pred_samples, groups):
+    def __init__(self, groups):
         self.groups = groups
         self.seas = self.groups['seasonality']
         self.h = self.groups['h']
         self.n = self.groups['predict']['n']
         self.s = self.groups['predict']['s']
-        self.pred_samples = np.mean(pred_samples, axis=0).reshape(self.n, self.s)[self.n - self.h:self.n, :]
         self.y_f = self.groups['predict']['data'].reshape(self.s, self.n).T
         self.errs = ['mase', 'rmse']
         self.levels = list(self.groups['predict']['groups_names'].keys())
@@ -66,30 +65,34 @@ class CalculateStoreResults:
 
         return error_metrics
 
-    def calculate_metrics(self):
-        """Aggregates the results for all the groups
+
+class CalculateResultsBottomUp(CalculateResultsBase):
+    r"""
+    Calculate results for the bottom-up strategy.
+
+    From the prediction of the bottom level series, aggregate the results for the upper levels
+    considering the hierarchical structure and compute the error metrics accordingly.
+
+    Parameters
+    ----------
+    pred_samples : numpy array
+        results for the bottom series
+    groups : dict
+        all the information regarding the different groups
+    """
+
+    def __init__(self, pred_samples, groups):
+        super().__init__(groups=groups)
+        self.pred_samples = np.mean(pred_samples, axis=0).reshape(self.n, self.s)[self.n - self.h:self.n, :]
+
+    def compute_error_for_every_group(self, error_metrics):
+        """Computes the error metrics for all the groups
 
         Returns:
-            error (obj): - contains all the error metric for each individual series of each group and the average
-                         - contains all the predictions for all the series and groups
+            error (obj): - contains all the error metric for each group in the dataset
+                         - contains all the predictions for all the groups
 
         """
-        error_metrics = dict()
-        error_metrics['mase'] = {}
-        error_metrics['rmse'] = {}
-        error_metrics['predictions'] = {}
-
-        error_metrics = self.calculate_metrics_for_individual_group('bottom',
-                                                                    self.y_f,
-                                                                    self.pred_samples,
-                                                                    error_metrics)
-        error_metrics['predictions']['bottom'] = self.pred_samples
-        error_metrics = self.calculate_metrics_for_individual_group('total',
-                                                                    np.sum(self.y_f, axis=1).reshape(-1, 1),
-                                                                    np.sum(self.pred_samples, axis=1).reshape(-1, 1),
-                                                                    error_metrics)
-        error_metrics['predictions']['total'] = np.sum(self.pred_samples, axis=1).reshape(-1, 1)
-        # All the groups present in the data
         idx_dict_new = dict()
         for group in list(self.groups['predict']['groups_names'].keys()):
             y_g = np.zeros((self.groups['predict']['n'], self.groups['predict']['groups_names'][group].shape[0]))
@@ -107,7 +110,50 @@ class CalculateStoreResults:
                                                                         f_g,
                                                                         error_metrics)
             error_metrics['predictions'][group] = np.sum(f_g, axis=1)
-            list(self.groups['predict']['groups_names'].keys())
+        return error_metrics
+
+    def bottom_up(self, level, error_metrics):
+        """Aggregates the results for all the groups
+
+        Returns:
+            error (obj): - contains all the error metric for the specific level
+
+        """
+        if level == 'bottom':
+            error_metrics = self.calculate_metrics_for_individual_group(level,
+                                                                        self.y_f,
+                                                                        self.pred_samples,
+                                                                        error_metrics)
+            error_metrics['predictions']['bottom'] = self.pred_samples
+        elif level == 'total':
+            error_metrics = self.calculate_metrics_for_individual_group(level,
+                                                                        np.sum(self.y_f, axis=1).reshape(-1, 1),
+                                                                        np.sum(self.pred_samples, axis=1).reshape(-1, 1),
+                                                                        error_metrics)
+            error_metrics['predictions']['total'] = np.sum(self.pred_samples, axis=1).reshape(-1, 1)
+        elif level == 'groups':
+            self.compute_error_for_every_group(error_metrics)
+
+        return error_metrics
+
+    def calculate_metrics(self):
+        """Aggregates the results for all the groups
+
+        Returns:
+            error (obj): - contains all the error metric for each individual series of each group and the average
+                         - contains all the predictions for all the series and groups
+
+        """
+        error_metrics = dict()
+        error_metrics['mase'] = {}
+        error_metrics['rmse'] = {}
+        error_metrics['predictions'] = {}
+
+        error_metrics = self.bottom_up('bottom', error_metrics)
+        error_metrics = self.bottom_up('total', error_metrics)
+        error_metrics = self.bottom_up('groups', error_metrics)
+
+        # Aggregate all errors and create the 'all' category
         for err in self.errs:
             error_metrics[err]['all_ind'] = np.concatenate([error_metrics[err][f'{x}_ind'] for x in
                                                             self.levels],
@@ -117,3 +163,79 @@ class CalculateStoreResults:
         return error_metrics
 
 
+class CalculateResultsMint(CalculateResultsBase):
+    r"""
+    Calculate results for MinT reconciliation.
+
+    The usage is nearly identical to the bottom-up reconciliation strategy, but the implementation
+    is a bit different, since the MinT algorithm yields results for all levels in the hierarchy.
+    We just need to filter those to get the mean, lower and upper values for each level.
+
+    Parameters
+    ----------
+    df_results_mint : pandas
+        df with the results
+    groups : dict
+        dictionary with all the information regarding the different groups
+    """
+    def __init__(self, df_results_mint, groups):
+        super().__init__(groups=groups)
+        self.df_results_mint = df_results_mint
+
+    def mint_reconciliation(self, level, error_metrics):
+        """Get the results for each of the level of aggregation using the MinT strategy (bottom-up not needed)
+
+        Returns:
+            error (obj): - contains all the error metric for the specific level
+
+        """
+        if level == 'bottom':
+            pred_samples = df_results_mint_total['.mean']
+            error_metrics = self.calculate_metrics_for_individual_group(level,
+                                                                        self.y_f,
+                                                                        self.pred_samples,
+                                                                        error_metrics)
+            error_metrics['predictions']['bottom'] = self.pred_samples
+        elif level == 'total':
+
+            df_results_mint_total = self.df_results_mint.copy()
+
+            for g in list(self.groups['train']['groups_names'].keys()):
+                df_results_mint_total = df_results_mint_total.loc[df_results_mint_total[g] == '<aggregated>']
+            pred_samples = df_results_mint_total['.mean']
+
+            error_metrics = self.calculate_metrics_for_individual_group(level,
+                                                                        np.sum(self.y_f, axis=1).reshape(-1, 1),
+                                                                        pred_samples,
+                                                                        error_metrics)
+            error_metrics['predictions']['total'] = np.sum(self.pred_samples, axis=1).reshape(-1, 1)
+        elif level == 'groups':
+            self.compute_error_for_every_group(error_metrics)
+
+        return error_metrics
+
+    def calculate_metrics(self):
+        """Aggregates the results for all the groups
+
+        Returns:
+            error (obj): - contains all the error metric for each individual series of each group and the average
+                         - contains all the predictions for all the series and groups
+
+        """
+        error_metrics = dict()
+        error_metrics['mase'] = {}
+        error_metrics['rmse'] = {}
+        error_metrics['predictions'] = {}
+
+        error_metrics = self.mint_reconciliation('bottom', error_metrics)
+        error_metrics = self.mint_reconciliation('total', error_metrics)
+        error_metrics = self.mint_reconciliation('groups', error_metrics)
+
+        # Aggregate all errors and create the 'all' category
+        for err in self.errs:
+            error_metrics[err]['all_ind'] = np.concatenate([error_metrics[err][f'{x}_ind'] for x in
+                                                            self.levels],
+                                                           0)
+            error_metrics[err]['all'] = np.mean(error_metrics[err]['all_ind'])
+
+        return error_metrics
