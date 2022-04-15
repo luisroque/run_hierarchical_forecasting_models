@@ -182,6 +182,33 @@ class CalculateResultsMint(CalculateResultsBase):
         super().__init__(groups=groups)
         self.df_results_mint = df_results_mint
 
+    def compute_error_for_every_group(self, error_metrics):
+        """Computes the error metrics for all the groups
+
+        Returns:
+            error (obj): - contains all the error metric for each group in the dataset
+                         - contains all the predictions for all the groups
+
+        """
+        idx_dict_new = dict()
+        for group in list(self.groups['predict']['groups_names'].keys()):
+            y_g = np.zeros((self.groups['predict']['n'], self.groups['predict']['groups_names'][group].shape[0]))
+            f_g = np.zeros((self.h, self.groups['predict']['groups_names'][group].shape[0]))
+
+            for idx, name in enumerate(self.groups['predict']['groups_names'][group]):
+                idx_dict_new[name] = np.where(self.groups['predict']['groups_idx'][group] == idx, 1, 0)
+
+                y_g[:, idx] = np.sum(idx_dict_new[name] * self.y_f, axis=1)
+                f_g[:, idx] = np.sum(idx_dict_new[name] * self.pred_samples, axis=1)
+                error_metrics['predictions'][name] = np.sum(idx_dict_new[name] * self.pred_samples, axis=1)
+
+            error_metrics = self.calculate_metrics_for_individual_group(group,
+                                                                        y_g,
+                                                                        f_g,
+                                                                        error_metrics)
+            error_metrics['predictions'][group] = np.sum(f_g, axis=1)
+        return error_metrics
+
     def mint_reconciliation(self, level, error_metrics):
         """Get the results for each of the level of aggregation using the MinT strategy (bottom-up not needed)
 
@@ -190,25 +217,28 @@ class CalculateResultsMint(CalculateResultsBase):
 
         """
         if level == 'bottom':
-            pred_samples = df_results_mint_total['.mean']
+            pred_samples = np.asarray(self.df_results_mint.loc[~self.df_results_mint.isin(['<aggregated>'])
+                                                                    .any(axis=1)]['.mean']) \
+                                        .reshape(self.n, self.s)[self.n - self.h:self.n, :]
             error_metrics = self.calculate_metrics_for_individual_group(level,
                                                                         self.y_f,
-                                                                        self.pred_samples,
+                                                                        pred_samples,
                                                                         error_metrics)
-            error_metrics['predictions']['bottom'] = self.pred_samples
+            error_metrics['predictions']['bottom'] = pred_samples
         elif level == 'total':
 
             df_results_mint_total = self.df_results_mint.copy()
 
             for g in list(self.groups['train']['groups_names'].keys()):
                 df_results_mint_total = df_results_mint_total.loc[df_results_mint_total[g] == '<aggregated>']
-            pred_samples = df_results_mint_total['.mean']
+
+            pred_samples = np.asarray(self.df_results_mint['.mean']).reshape(self.n, self.s)[self.n - self.h:self.n, :]
 
             error_metrics = self.calculate_metrics_for_individual_group(level,
                                                                         np.sum(self.y_f, axis=1).reshape(-1, 1),
                                                                         pred_samples,
                                                                         error_metrics)
-            error_metrics['predictions']['total'] = np.sum(self.pred_samples, axis=1).reshape(-1, 1)
+            error_metrics['predictions']['total'] = np.sum(pred_samples, axis=1).reshape(-1, 1)
         elif level == 'groups':
             self.compute_error_for_every_group(error_metrics)
 
