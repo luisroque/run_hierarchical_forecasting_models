@@ -171,26 +171,10 @@ class MinT:
         cols.append('Date')
         # Zip can sometimes have the dtype int and breaks
         pred_mint = pred_mint.astype({k: 'string' for k in cols})
-        #self.df = self.df.astype({k: 'string' for k in cols})
         pred_mint['Date'] = pd.to_datetime(pred_mint['Date'])
-        #self.df['Date'] = pd.to_datetime(self.df['Date'])
-
-        #res_joined = self.df.merge(pred_mint, how='left', on=cols)
-
-        #print(res_joined)
 
         # Filter only the predictions
         pred_mint = pred_mint[pred_mint['Date'] > self.last_train_date]
-
-        #pred = res_joined['.mean'].to_numpy().reshape(self.groups['train']['s'], self.groups['h']).T
-        #lower = res_joined['lower'].to_numpy().reshape(self.groups['train']['s'], self.groups['h']).T
-        #upper = res_joined['upper'].to_numpy().reshape(self.groups['train']['s'], self.groups['h']).T
-        #pred_complete = np.concatenate((np.zeros((self.groups['train']['n'],
-        #                                          self.groups['train']['s'])), pred), axis=0)[np.newaxis, :, :]
-        #lower_complete = np.concatenate((np.zeros((self.groups['train']['n'],
-        #                                          self.groups['train']['s'])), lower), axis=0)[np.newaxis, :, :]
-        #pper_complete = np.concatenate((np.zeros((self.groups['train']['n'],
-        #                                         self.groups['train']['s'])), upper), axis=0)[np.newaxis, :, :]
 
         return pred_mint
 
