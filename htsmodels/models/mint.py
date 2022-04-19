@@ -105,18 +105,19 @@ class MinT:
               fc <- fit %>% forecast(h = h)
               
               fc_csv = fc %>% 
-                # getting the 95% interval
-                hilo(level = 95) %>%
-                unpack_hilo('95%') %>% 
-                as_tibble %>% 
-                select(-Count) %>% 
-                rename(lower='95%_lower') %>%
-                rename(upper='95%_upper') %>%
-                mutate(.mean=.mean) %>%
-                mutate(.mean=(sprintf("%0.2f", .mean))) %>%
-                rename(time=Time) %>%
-                lapply(as.character) %>% 
-                data.frame(stringsAsFactors=FALSE)
+                        # getting the 95% interval
+                        hilo(level = 95) %>%
+                        unpack_hilo('95%') %>% 
+                        as_tibble %>% 
+                        mutate(mean=mean(Count)) %>%
+                        mutate(variance=sqrt(distributional::variance(Count))) %>%
+                        select(-Count) %>% 
+                        rename(lower='95%_lower') %>%
+                        rename(upper='95%_upper') %>%
+                        select(-.mean) %>%
+                        rename(time=Quarter) %>%
+                        lapply(as.character) %>% 
+                        data.frame(stringsAsFactors=FALSE)
               
               return (fc_csv)
             }

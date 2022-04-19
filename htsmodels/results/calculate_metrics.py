@@ -1,5 +1,6 @@
 import numpy as np
 from sklearn.metrics import mean_squared_error
+import properscoring as ps
 
 
 class CalculateResultsBase:
@@ -22,7 +23,7 @@ class CalculateResultsBase:
         self.s = self.groups['predict']['s']
         self.y_f = self.groups['predict']['data'].reshape(self.s, self.n).T
         self.errs = ['mase', 'rmse']
-        self.levels = list(self.groups['predict']['groups_names'].keys())
+        self.levels = list(self.groups['train']['groups_names'].keys())
         self.levels.extend(('bottom', 'total'))
 
     def mase(self, y, f):
