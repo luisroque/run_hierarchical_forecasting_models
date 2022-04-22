@@ -14,9 +14,10 @@ import time
 
 class DeepAR:
 
-    def __init__(self, dataset, groups, input_dir='./'):
+    def __init__(self, dataset, groups, input_dir='./', n_samples=500):
         self.dataset = dataset
         self.groups = groups
+        self.n_samples = n_samples
         self.timer_start = time.time()
         self.wall_time_preprocess = None
         self.wall_time_build_model = None
@@ -26,7 +27,8 @@ class DeepAR:
         self.input_dir = input_dir
         self._create_directories()
         self.stat_cat_cardinalities = [v for k, v in self.groups['train']['groups_n'].items()]
-        self.stat_cat = np.concatenate(([v.reshape(-1, 1) for k, v in self.groups['train']['groups_idx'].items()]), axis=1)
+        self.stat_cat = np.concatenate(([v.reshape(-1, 1) for k, v in self.groups['train']['groups_idx'].items()]),
+                                       axis=1)
         self.dates = [groups['dates'][0] for _ in range(groups['train']['s'])]
 
         time_interval = (self.groups['dates'][1] - self.groups['dates'][0]).days
@@ -60,7 +62,8 @@ class DeepAR:
         return train_ds
 
     def _build_test_ds(self):
-        test_target_values = self.groups['predict']['data'].reshape(self.groups['predict']['s'], self.groups['predict']['n'])
+        test_target_values = self.groups['predict']['data'].reshape(self.groups['predict']['s'],
+                                                                    self.groups['predict']['n'])
 
         test_ds = ListDataset([
             {
@@ -79,7 +82,6 @@ class DeepAR:
         self.wall_time_preprocess = time.time() - self.timer_start
         train_ds = self._build_train_ds()
         self.wall_time_build_model = time.time() - self.timer_start - self.wall_time_preprocess
-
 
         estimator = DeepAREstimator(
             prediction_length=self.groups['h'],
@@ -106,7 +108,7 @@ class DeepAR:
         forecast_it, ts_it = make_evaluation_predictions(
             dataset=test_ds,
             predictor=model,
-            num_samples=100
+            num_samples=self.n_samples
         )
 
         print("Obtaining time series predictions ...")
@@ -115,34 +117,32 @@ class DeepAR:
 
         return forecasts
 
-    def results(self, forecasts, n_samples=100):
-        res = np.zeros((len(forecasts), n_samples, self.groups['h']))
+    def results(self, forecasts):
+        res = np.zeros((len(forecasts), self.n_samples, self.groups['h']))
         for i, j in enumerate(forecasts):
             res[i] = j.samples
 
-        res = np.concatenate((np.zeros((self.groups['train']['s'], n_samples, self.groups['train']['n']), dtype=np.float64), res), axis=2)
-        res = np.transpose(res, (1, 2, 0))
-        mean = np.percentile(res, 50, axis=0)[np.newaxis, :, :]
-        lower = np.percentile(res, 2.5, axis=0)[np.newaxis, :, :]
-        upper = np.percentile(res, 97.5, axis=0)[np.newaxis, :, :]
-        return mean, lower, upper
+        res = np.transpose(np.concatenate((np.zeros((self.groups['train']['s'], self.n_samples, self.groups['train']['n']),
+                                                    dtype=np.float64), res),
+                                          axis=2),
+                           (2, 0, 1))
+
+        return res
 
     def store_metrics(self, res):
         with open(f'{self.input_dir}results/results_gp_cov_{self.dataset}.pickle', 'wb') as handle:
             pickle.dump(res, handle, pickle.HIGHEST_PROTOCOL)
 
-    def metrics(self, mean, lower, upper):
-        calc_results = CalculateResultsBottomUp(mean, self.groups)
+    def metrics(self, samples):
+        calc_results = CalculateResultsBottomUp(samples, self.groups)
         res = calc_results.calculate_metrics()
         self.wall_time_total = time.time() - self.timer_start
 
-        res['mean'] = mean
-        res['lower'] = lower
-        res['upper'] = upper
         res['wall_time'] = {}
         res['wall_time']['wall_time_preprocess'] = self.wall_time_preprocess
         res['wall_time']['wall_time_build_model'] = self.wall_time_build_model
         res['wall_time']['wall_time_train'] = self.wall_time_train
         res['wall_time']['wall_time_predict'] = self.wall_time_predict
         res['wall_time']['wall_time_total'] = self.wall_time_total
+
         return res

@@ -64,14 +64,15 @@ class MinT:
     def train(self, algorithm='ets', rec_method='mint'):
         """Train ETS or ARIMA with conventional bottom-up or MinT reconciliation strategies
 
-        :param algorithm: ETS or ARIMA
-        :param rec_method: reconciliation method (bottom_up or mint)
+        :param algorithm: ets or arima
+        :param rec_method: reconciliation method (bottom_up, mint or base)
+            base means that we just forecast all time series without any reconciliation
         :return: df with results
         """
         self.wall_time_preprocess = time.time() - self.timer_start
         robjects.r('''
             library('fpp3')
-            results_fn <- function(df, time, h, string_aggregate, start_predict_date) {
+            results_fn <- function(df, time, h, string_aggregate, start_predict_date, algorithm, rec_method) {
               if (time == 'quarter') {
                 fn = yearquarter
               } else if (time == 'month') {
@@ -83,6 +84,21 @@ class MinT:
               } else if (time == 'day') {
                 fn = ymd
               } 
+              
+              # Get the correct algorithm and assign the respective function
+              if (algorithm == 'ets') {
+                algo_fn = ETS
+              } else if (algorithm == 'arima') {
+                algo_fn = ARIMA
+              }
+              
+              # Get the correct reconciliation method and assign the respective function
+              if (rec_method == 'bottom_up') {
+                rec_method_fn = bottom_up
+              } else if (rec_method == 'mint') {
+                rec_method_fn = min_trace
+              }
+              
               data <- df %>%
                 mutate(Time = fn(Date)) %>%
                 select(-Date) %>%
@@ -94,13 +110,14 @@ class MinT:
               
               fit <- data_gts %>%
                 filter(Time <= fn(as.Date(start_predict_date))) %>%
-                  model(base = ETS(Count),
-                        base_arima = ARIMA(Count)) %>%
+                  model(base = algo_fn(Count)) %>%
                   reconcile(
-                    bottom_up_ets = bottom_up(base),
-                    mint_ets = min_trace(base, method = "mint_shrink"),
-                    bottom_up_arima = bottom_up(base_arima),
-                    mint_arima = min_trace(base_arima, method = "mint_shrink")
+                    if (rec_method == 'mint') {
+                        rec = rec_method_fn(base, method = 'mint_shrink')
+                    } else if (rec_method == 'bottom_up') {
+                        rec = rec_method_fn(base)
+                    } else {
+                    }
                   )
               fc <- fit %>% forecast(h = h)
               
@@ -110,12 +127,12 @@ class MinT:
                         unpack_hilo('95%') %>% 
                         as_tibble %>% 
                         mutate(mean=mean(Count)) %>%
-                        mutate(variance=sqrt(distributional::variance(Count))) %>%
+                        mutate(std=sqrt(distributional::variance(Count))) %>%
                         select(-Count) %>% 
                         rename(lower='95%_lower') %>%
                         rename(upper='95%_upper') %>%
                         select(-.mean) %>%
-                        rename(time=Quarter) %>%
+                        rename(time=Time) %>%
                         lapply(as.character) %>% 
                         data.frame(stringsAsFactors=FALSE)
               
@@ -130,16 +147,24 @@ class MinT:
                                  self.time_int,
                                  self.groups['h'],
                                  self.aggregate_key,
-                                 self.last_train_date)
+                                 self.last_train_date,
+                                 algorithm,
+                                 rec_method)
         with localconverter(ro.default_converter + pandas2ri.converter):
             df_result = ro.conversion.rpy2py(df_result_r)
 
-        # filter the results to only contain the algorithm and reconciliation method chosen
-        df_result = df_result[df_result['.model'] == rec_method+'_'+algorithm]
+        # When it runs the reconciliation it also runs the base algorithm, so
+        # it has two different outputs stored in the df that we need to filter
+        if not rec_method == 'base':
+            df_result = df_result.loc[df_result['.model'] != 'base']
 
-        df_result[['.mean']] = df_result[['.mean']].astype('float')
+        # name properly the models in the dataframe
+        df_result.loc[:, '.model'] = algorithm + '_' + rec_method
+
+        df_result[['mean']] = df_result[['mean']].astype('float')
         df_result[['lower']] = df_result[['lower']].astype('float')
         df_result[['upper']] = df_result[['upper']].astype('float')
+        df_result[['std']] = df_result[['std']].astype('float')
         self.wall_time_build_model = time.time() - self.timer_start - self.wall_time_preprocess
         self.wall_time_train = time.time() - self.timer_start - self.wall_time_build_model
         self.wall_time_predict = time.time() - self.timer_start - self.wall_time_train
@@ -189,9 +214,6 @@ class MinT:
         res = calc_results.calculate_metrics()
         self.wall_time_total = time.time() - self.timer_start
 
-        res['mean'] = res
-        #res['lower'] = lower
-        #res['upper'] = upper
         res['wall_time'] = {}
         res['wall_time']['wall_time_preprocess'] = self.wall_time_preprocess
         res['wall_time']['wall_time_build_model'] = self.wall_time_build_model

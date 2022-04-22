@@ -21,6 +21,11 @@ class TestModel(unittest.TestCase):
         forecasts = self.mint.train()
         df_results = self.mint.results(forecasts)
         res = self.mint.metrics(df_results)
-        self.assertTrue(res['mean'].shape == (1, self.n, self.s))
-        self.assertTrue(res['lower'].shape == (1, self.n, self.s))
-        self.assertTrue(res['upper'].shape == (1, self.n, self.s))
+
+        # Test shape of results
+        self.assertTrue(res['mase']['bottom_ind'].shape == (self.s, ))
+        self.assertTrue(res['CRPS']['bottom_ind'].shape == (self.s, ))
+        self.assertTrue(res['rmse']['bottom_ind'].shape == (self.s, ))
+
+        # Test shape of predictions
+        self.assertTrue(res['predictions']['samples']['bottom'].shape == (self.data['h'], self.s, 500))
