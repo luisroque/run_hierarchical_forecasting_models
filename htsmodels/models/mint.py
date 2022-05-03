@@ -13,7 +13,8 @@ import time
 
 class MinT:
 
-    def __init__(self, dataset, groups, aggregate_key=None, input_dir='./'):
+    def __init__(self, dataset, groups, aggregate_key=None, input_dir='./',
+                 store_prediction_samples=False, store_prediction_points=False):
         self.dataset = dataset
         self.groups = groups
         self.timer_start = time.time()
@@ -36,6 +37,8 @@ class MinT:
         dict_groups['Date'] = np.tile(np.array(groups['dates']), (groups['train']['s'],))
         self.df = pd.DataFrame(dict_groups)
         self.algorithm = 'mint'
+        self.store_prediction_samples = store_prediction_samples
+        self.store_prediction_points = store_prediction_points
 
         time_interval = (self.groups['dates'][1] - self.groups['dates'][0]).days
         if time_interval < 2:
@@ -210,7 +213,9 @@ class MinT:
 
     def metrics(self, df_results_mint):
         calc_results = CalculateResultsMint(df_results_mint=df_results_mint,
-                                            groups=self.groups)
+                                            groups=self.groups,
+                                            store_prediction_samples=self.store_prediction_samples,
+                                            store_prediction_points=self.store_prediction_points)
         res = calc_results.calculate_metrics()
         self.wall_time_total = time.time() - self.timer_start
 

@@ -14,7 +14,9 @@ import time
 
 class DeepAR:
 
-    def __init__(self, dataset, groups, input_dir='./', n_samples=500):
+    def __init__(self, dataset, groups, input_dir='./', n_samples=500,
+                 store_prediction_samples=False,
+                 store_prediction_points=False):
         self.dataset = dataset
         self.groups = groups
         self.n_samples = n_samples
@@ -30,6 +32,8 @@ class DeepAR:
         self.stat_cat = np.concatenate(([v.reshape(-1, 1) for k, v in self.groups['train']['groups_idx'].items()]),
                                        axis=1)
         self.dates = [groups['dates'][0] for _ in range(groups['train']['s'])]
+        self.store_prediction_samples = store_prediction_samples
+        self.store_prediction_points = store_prediction_points
 
         time_interval = (self.groups['dates'][1] - self.groups['dates'][0]).days
         if time_interval < 8:
@@ -134,7 +138,9 @@ class DeepAR:
             pickle.dump(res, handle, pickle.HIGHEST_PROTOCOL)
 
     def metrics(self, samples):
-        calc_results = CalculateResultsBottomUp(samples, self.groups)
+        calc_results = CalculateResultsBottomUp(samples, self.groups,
+                                                self.store_prediction_samples,
+                                                self.store_prediction_points)
         res = calc_results.calculate_metrics()
         self.wall_time_total = time.time() - self.timer_start
 

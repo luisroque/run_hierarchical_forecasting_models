@@ -25,7 +25,7 @@ class TestModel(unittest.TestCase):
         model = self.deepar.train(epochs=10)
         forecasts = self.deepar.predict(model)
         res = self.deepar.results(forecasts)
-        self.assertTrue(res.shape == (100, self.n, self.s))
+        self.assertTrue(res.shape == (self.n, self.s, 500))
 
     def test_results_interval(self):
         model = self.deepar.train(epochs=10)

@@ -23,5 +23,5 @@ class TestModel(unittest.TestCase):
 
     def test_predict_shape(self):
         forecasts = self.mint.train()
-        res = self.mint.results(forecasts)
-        self.assertTrue(res.shape == (1, self.n, self.s))
+        df_results = self.mint.results(forecasts)
+        self.assertTrue(df_results.shape == (576, 11))

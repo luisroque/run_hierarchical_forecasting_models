@@ -24,10 +24,10 @@ class TestModel(unittest.TestCase):
     def test_predict_shape(self):
         forecasts = self.mint.train()
         res = self.mint.results(forecasts)
-        self.assertTrue(res.shape == (1, self.n, self.s))
+        self.assertTrue(res.shape == (900, 11))
 
     def test_results_interval(self):
         forecasts = self.mint.train()
-        results = self.mint.results(forecasts)
-        res = self.mint.metrics(results)
+        df_results = self.mint.results(forecasts)
+        res = self.mint.metrics(df_results)
         self.assertLess(res['mase']['bottom'], 2.5)

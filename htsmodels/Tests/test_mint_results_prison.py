@@ -24,7 +24,7 @@ class TestModel(unittest.TestCase):
     def test_predict_shape(self):
         forecasts = self.mint.train()
         res = self.mint.results(forecasts)
-        self.assertTrue(res.shape == (1, self.n, self.s))
+        self.assertTrue(res.shape == (96, 10))
 
     def test_results_interval(self):
         forecasts = self.mint.train()
@@ -34,6 +34,6 @@ class TestModel(unittest.TestCase):
 
     def test_wall_time(self):
         forecasts = self.mint.train()
-        results = self.mint.results(forecasts)
-        res = self.mint.metrics(results)
+        df_results = self.mint.results(forecasts)
+        res = self.mint.metrics(df_results)
         self.assertLess(res['wall_time']['wall_time_total'], 50)
