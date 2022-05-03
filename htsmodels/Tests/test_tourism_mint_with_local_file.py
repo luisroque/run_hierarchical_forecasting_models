@@ -37,8 +37,8 @@ class TestModel(unittest.TestCase):
         self.assertTrue(res['predictions']['samples']['total'].shape == (self.data['h'], 500))
         self.assertTrue(res['predictions']['points']['total'].shape == (self.data['h'],))
         # Test number of objects predicted and stored
-        self.assertTrue(len(res['predictions']['samples']) == 12)
-        self.assertTrue(len(res['predictions']['points']) == 12)
+        self.assertTrue(len(res['predictions']['samples']) == 8)
+        self.assertTrue(len(res['predictions']['points']) == 8)
 
     def test_results_mean_and_prediction_interval_without_storing_results(self):
         self.mint = MinT(dataset='tourism', groups=self.data,
