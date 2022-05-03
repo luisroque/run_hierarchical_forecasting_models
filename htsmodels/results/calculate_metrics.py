@@ -276,12 +276,10 @@ class CalculateResultsMint(CalculateResultsBase):
                 if self.store_prediction_points:
                     error_metrics['predictions']['points'][name] = f_g
                 if self.store_prediction_samples:
-                    error_metrics['predictions']['samples'][name] = np.random.normal(loc=f_g,
-                                                                                     scale=std_g,
+                    error_metrics['predictions']['samples'][name] = np.random.normal(loc=f_g[:, idx],
+                                                                                     scale=std_g[:, idx],
                                                                                      size=(self.samples,
-                                                                                           self.h,
-                                                                                           self.s)).reshape((self.h,
-                                                                                                             self.s,
+                                                                                           self.h)).reshape((self.h,
                                                                                                              -1))
 
             error_metrics = self.calculate_metrics_for_individual_group(group,
@@ -289,16 +287,7 @@ class CalculateResultsMint(CalculateResultsBase):
                                                                         f_g,
                                                                         error_metrics,
                                                                         predictions_std=std_g)
-            if self.store_prediction_points:
-                error_metrics['predictions']['points'][group] = f_g
-            if self.store_prediction_samples:
-                error_metrics['predictions']['samples'][group] = np.random.normal(loc=f_g,
-                                                                                  scale=std_g,
-                                                                                  size=(self.samples,
-                                                                                        self.h,
-                                                                                        self.s)).reshape((self.h,
-                                                                                                          self.s,
-                                                                                                          -1))
+
         return error_metrics
 
     def mint_reconciliation(self, level, error_metrics):
