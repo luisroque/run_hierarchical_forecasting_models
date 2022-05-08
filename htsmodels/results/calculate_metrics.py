@@ -79,23 +79,21 @@ class CalculateResultsBase:
 
         if predictions_std is not None:
             error_metrics['CRPS'][f'{group_name}'] = ps.crps_ensemble(y_p,
-                                                                      np.random.normal(loc=predictions_mean,
-                                                                                       scale=predictions_std,
-                                                                                       size=(self.samples,
-                                                                                             self.h,
-                                                                                             n_s))
-                                                                      .reshape((self.h,
-                                                                                n_s,
-                                                                                -1))).mean()
-            error_metrics['CRPS'][f'{group_name}_ind'] = ps.crps_ensemble(y_p,
+                                                                      np.transpose(
                                                                           np.random.normal(loc=predictions_mean,
                                                                                            scale=predictions_std,
                                                                                            size=(self.samples,
                                                                                                  self.h,
-                                                                                                 n_s))
-                                                                          .reshape((self.h,
-                                                                                    n_s,
-                                                                                    -1))).mean(axis=0)
+                                                                                                 n_s)),
+                                                                          (1, 2, 0))).mean()
+            error_metrics['CRPS'][f'{group_name}_ind'] = ps.crps_ensemble(y_p,
+                                                                          np.transpose(
+                                                                              np.random.normal(loc=predictions_mean,
+                                                                                               scale=predictions_std,
+                                                                                               size=(self.samples,
+                                                                                                     self.h,
+                                                                                                     n_s)),
+                                                                              (1, 2, 0))).mean(axis=0)
         else:
             error_metrics['CRPS'][f'{group_name}'] = ps.crps_ensemble(y_p, predictions_sample).mean()
             error_metrics['CRPS'][f'{group_name}_ind'] = ps.crps_ensemble(y_p, predictions_sample).mean(axis=0)
@@ -300,9 +298,9 @@ class CalculateResultsMint(CalculateResultsBase):
         if level == 'bottom':
             n_s = self.s
             pred_samples_mean = np.asarray(self.df_results_mint.loc[~self.df_results_mint.isin(['<aggregated>'])
-                                                                    .any(axis=1)]['mean']).reshape((self.h, n_s))
+                                                                    .any(axis=1)]['mean']).reshape((n_s, self.h)).T
             pred_samples_std = np.asarray(self.df_results_mint.loc[~self.df_results_mint.isin(['<aggregated>'])
-                                                                   .any(axis=1)]['std']).reshape((self.h, n_s))
+                                                                   .any(axis=1)]['std']).reshape((n_s, self.h)).T
             error_metrics = self.calculate_metrics_for_individual_group(level,
                                                                         self.y_f,
                                                                         pred_samples_mean,
@@ -311,21 +309,20 @@ class CalculateResultsMint(CalculateResultsBase):
             if self.store_prediction_points:
                 error_metrics['predictions']['points']['bottom'] = pred_samples_mean
             if self.store_prediction_samples:
-                error_metrics['predictions']['samples']['bottom'] = np.random.normal(loc=pred_samples_mean,
-                                                                                     scale=pred_samples_std,
-                                                                                     size=(self.samples,
-                                                                                           self.h,
-                                                                                           self.s)).reshape((self.h,
-                                                                                                             n_s,
-                                                                                                             -1))
+                error_metrics['predictions']['samples']['bottom'] = np.transpose(np.random.normal(loc=pred_samples_mean,
+                                                                                                  scale=pred_samples_std,
+                                                                                                  size=(self.samples,
+                                                                                                        self.h,
+                                                                                                        self.s)),
+                                                                                 (1, 2, 0))
         elif level == 'total':
             n_s = 1
             pred_samples_mean = np.asarray(self.df_results_mint.loc[self.df_results_mint
                                            .iloc[:, :self.groups['train']['g_number']]
-                                           .isin(['<aggregated>']).all(axis=1)]['mean']).reshape((self.h, n_s))
+                                           .isin(['<aggregated>']).all(axis=1)]['mean']).reshape((n_s, self.h)).T
             pred_samples_std = np.asarray(self.df_results_mint.loc[self.df_results_mint
                                           .iloc[:, :self.groups['train']['g_number']]
-                                          .isin(['<aggregated>']).all(axis=1)]['std']).reshape((self.h, n_s))
+                                          .isin(['<aggregated>']).all(axis=1)]['std']).reshape((n_s, self.h)).T
 
             error_metrics = self.calculate_metrics_for_individual_group(level,
                                                                         np.sum(self.y_f, axis=1).reshape(-1, 1),
