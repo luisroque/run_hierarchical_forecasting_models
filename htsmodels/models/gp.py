@@ -2,10 +2,9 @@ import gpytorch
 
 
 class ExactGPModel(gpytorch.models.ExactGP):
-    def __init__(self, train_x, train_y, likelihood, cov, changepoints, mean_func):
+    def __init__(self, train_x, train_y, likelihood, cov, mean_func):
         super().__init__(train_x, train_y, likelihood)
-        self.changepoints = changepoints
-        self.mean_module = mean_func(self.changepoints)
+        self.mean_module = mean_func
         self.covar_module = cov
 
     def forward(self, x):
