@@ -11,7 +11,9 @@ class TestModel(unittest.TestCase):
         self.n = self.data['predict']['n']
         self.s = self.data['train']['s']
         shutil.rmtree("./data/original_datasets")
-        self.mint = MinT(dataset='prison', groups=self.data)
+        self.mint = MinT(dataset='prison', groups=self.data,
+                         store_prediction_samples=True,
+                         store_prediction_points=True)
 
     @classmethod
     def tearDownClass(cls):
@@ -25,6 +27,7 @@ class TestModel(unittest.TestCase):
         forecasts = self.mint.train()
         results = self.mint.results(forecasts)
         res = self.mint.metrics(results)
+        self.mint.store_metrics(res)
         self.assertLess(res['mase']['bottom'], 2.2)
         self.assertLess(res['CRPS']['bottom_ind'][0], 5)
 
