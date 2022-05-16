@@ -2,12 +2,17 @@ import gpytorch
 import torch
 
 
+class ZeroMean(gpytorch.means.Mean):
+    def forward(self, input):
+        return torch.zeros((input.size(0), input.size(1)), dtype=input.dtype, device=input.device)
+
+
 class LinearMean(gpytorch.means.Mean):
-    def __init__(self, input_size, batch_shape=torch.Size(), bias=True):
+    def __init__(self, bias=True):
         super().__init__()
-        self.register_parameter(name="weights", parameter=torch.nn.Parameter(torch.randn(*batch_shape, input_size, 1)))
+        self.register_parameter(name="weights", parameter=torch.nn.Parameter(torch.tensor([[0.1]])))
         if bias:
-            self.register_parameter(name="bias", parameter=torch.nn.Parameter(torch.randn(*batch_shape, 1)))
+            self.register_parameter(name="bias", parameter=torch.nn.Parameter(torch.tensor([[0.1]])))
         else:
             self.bias = None
 
@@ -16,7 +21,6 @@ class LinearMean(gpytorch.means.Mean):
         res = x.matmul(self.weights).squeeze(-1)
         if self.bias is not None:
             res = res + self.bias
-
         return res
 
 

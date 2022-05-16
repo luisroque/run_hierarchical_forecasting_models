@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import gpytorch
 from .gp import ExactGPModel
-from .mean_functions import PiecewiseLinearMean, LinearMean
+from .mean_functions import PiecewiseLinearMean, LinearMean, ZeroMean
 from gpytorch.mlls import SumMarginalLogLikelihood
 from htsmodels.results.calculate_metrics import CalculateResultsBottomUp
 import pickle
@@ -81,15 +81,19 @@ class SGP:
                                                self.train_y[:, i],
                                                likelihood_list[i],
                                                covs[i],
-                                               changepoints,
-                                               PiecewiseLinearMean))
+                                               PiecewiseLinearMean(changepoints)))
+            elif mean_function == 'zero':
+                model_list.append(ExactGPModel(self.train_x,
+                                               self.train_y[:, i],
+                                               likelihood_list[i],
+                                               covs[i],
+                                               gpytorch.means.ZeroMean()))
             elif mean_function == 'linear':
                 model_list.append(ExactGPModel(self.train_x,
                                                self.train_y[:, i],
                                                likelihood_list[i],
                                                covs[i],
-                                               changepoints,
-                                               LinearMean))
+                                               LinearMean(1)))
 
         self.wall_time_build_model = time.time() - self.timer_start - self.wall_time_preprocess
         return likelihood_list, model_list
