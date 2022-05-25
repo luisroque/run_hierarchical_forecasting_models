@@ -7,7 +7,7 @@ import shutil
 class TestModel(unittest.TestCase):
 
     def setUp(self):
-        self.data = tsag.preprocessing.PreprocessDatasets('tourism', test_size=228*10).apply_preprocess()
+        self.data = tsag.preprocessing.PreprocessDatasets('tourism', test_size=228*30).apply_preprocess()
         self.n = self.data['predict']['n']
         self.s = self.data['train']['s']
         shutil.rmtree("./data/original_datasets")
