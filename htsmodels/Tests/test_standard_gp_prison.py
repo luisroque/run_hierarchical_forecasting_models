@@ -14,7 +14,7 @@ class TestModel(unittest.TestCase):
         self.gpf = SGP('prison', self.data)
 
     def test_results_interval_piecewise(self):
-        model, like = self.gpf.train(n_iterations=100)
+        model, like = self.gpf.train(n_iterations=500)
         samples = self.gpf.predict(model, like)
         res = self.gpf.metrics(samples)
         self.assertLess(res['mase']['bottom'], 2.5)
