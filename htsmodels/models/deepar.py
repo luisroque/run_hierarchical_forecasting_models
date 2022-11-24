@@ -97,8 +97,7 @@ class DeepAR:
             trainer=Trainer(
                 learning_rate=lr,
                 epochs=epochs,
-                num_batches_per_epoch=50,
-                batch_size=32
+                num_batches_per_epoch=50
             )
         )
 
