@@ -30,3 +30,9 @@ class TestModel(unittest.TestCase):
         samples = self.gpf.predict(model, like)
         res = self.gpf.metrics(samples)
         self.assertLess(res['mase']['bottom'], 4)
+
+    def test_results_interval_zero_noclip(self):
+        model, like = self.gpf.train(n_iterations=100, mean_function='zero')
+        samples = self.gpf.predict(model, like, False)
+        res = self.gpf.metrics(samples)
+        self.assertLess(res['mase']['bottom'], 4)

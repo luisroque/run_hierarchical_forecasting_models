@@ -122,7 +122,7 @@ class SGP:
         self.wall_time_train = time.time() - self.timer_start - self.wall_time_build_model
         return model, likelihood
 
-    def predict(self, model, likelihood):
+    def predict(self, model, likelihood, clip=True):
         model.eval()
         likelihood.eval()
 
@@ -144,7 +144,8 @@ class SGP:
         self.groups = self.dt.inv_transf_train()
 
         # Clip predictions to 0 if there are negative numbers
-        samples[samples < 0] = 0
+        if clip:
+            samples[samples < 0] = 0
 
         self.wall_time_predict = time.time() - self.timer_start - self.wall_time_train
         return samples

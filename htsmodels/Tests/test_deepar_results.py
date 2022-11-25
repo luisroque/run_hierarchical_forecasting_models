@@ -35,6 +35,14 @@ class TestModel(unittest.TestCase):
         self.assertLess(res['mase']['bottom'], 2.8)
         self.assertLess(res['CRPS']['bottom_ind'][0], 5)
 
+    def test_results_interval_negbindist(self):
+        model = self.deepar.train(epochs=10, dist='NegativeBinomial')
+        forecasts = self.deepar.predict(model)
+        results = self.deepar.results(forecasts)
+        res = self.deepar.metrics(results)
+        self.assertLess(res['mase']['bottom'], 2.8)
+        self.assertLess(res['CRPS']['bottom_ind'][0], 5)
+
     def test_wall_time(self):
         model = self.deepar.train(epochs=10)
         forecasts = self.deepar.predict(model)
