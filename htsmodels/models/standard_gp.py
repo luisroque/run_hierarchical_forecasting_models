@@ -247,7 +247,7 @@ class SGP:
         track_mem: bool = True,
     ):
         with open(
-            f"{self.input_dir}results/results_gp_cov_{self.dataset}_{self.model_version}.pickle",
+            f"{self.input_dir}results_gp_cov_{self.dataset}_{self.model_version}.pickle",
             "wb",
         ) as handle:
             if track_mem:

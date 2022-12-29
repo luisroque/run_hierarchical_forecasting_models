@@ -187,7 +187,7 @@ class DeepAR:
 
     def store_metrics(self, res, track_mem=True):
         with open(
-            f"{self.input_dir}results/results_gp_cov_{self.dataset}.pickle", "wb"
+            f"{self.input_dir}results_gp_cov_{self.dataset}.pickle", "wb"
         ) as handle:
             if track_mem:
                 process = psutil.Process(os.getpid())

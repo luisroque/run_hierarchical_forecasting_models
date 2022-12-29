@@ -228,7 +228,7 @@ class MinT:
         return pred_mint
 
     def store_metrics(self, res, track_mem=True):
-        with open(f'{self.input_dir}results/results_gp_cov_{self.dataset}.pickle', 'wb') as handle:
+        with open(f"{self.input_dir}results_gp_cov_{self.dataset}.pickle", 'wb') as handle:
             if track_mem:
                 process = psutil.Process(os.getpid())
                 mem = process.memory_info().rss / (1024**3)
