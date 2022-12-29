@@ -1,7 +1,6 @@
 import unittest
 import tsaugmentation as tsag
 from htsmodels.models.mint import MinT
-import shutil
 
 
 class TestModel(unittest.TestCase):
@@ -10,12 +9,7 @@ class TestModel(unittest.TestCase):
         self.data = tsag.preprocessing.PreprocessDatasets('prison').apply_preprocess()
         self.n = self.data['predict']['n']
         self.s = self.data['train']['s']
-        shutil.rmtree("./data/original_datasets")
-        self.mint = MinT(dataset='prison', groups=self.data)
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree("./results")
+        self.mint = MinT(dataset='prison', groups=self.data, input_dir='./results/mint/')
 
     def test_correct_train(self):
         model = self.mint.train()
