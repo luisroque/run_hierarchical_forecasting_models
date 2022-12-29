@@ -32,7 +32,6 @@ class SGP:
         self.wall_time_train = None
         self.wall_time_predict = None
         self.wall_time_total = None
-        self._create_directories()
         self.n_samples = n_samples
 
         self.groups, self.scaler = self._preprocess(groups)
@@ -71,10 +70,6 @@ class SGP:
         )
 
         self.model_version = __version__
-
-    def _create_directories(self):
-        # Create directory to store results if does not exist
-        Path(f"{self.input_dir}results").mkdir(parents=True, exist_ok=True)
 
     def _preprocess(self, groups):
         scaler = StandardScaler()

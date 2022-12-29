@@ -36,7 +36,6 @@ class DeepAR:
         self.wall_time_predict = None
         self.wall_time_total = None
         self.input_dir = input_dir
-        self._create_directories()
         self.stat_cat_cardinalities = [
             v for k, v in self.groups["train"]["groups_n"].items()
         ]
@@ -83,10 +82,6 @@ class DeepAR:
             to_file=True,
             log_dir=log_dir,
         )
-
-    def _create_directories(self):
-        # Create directory to store results if does not exist
-        Path(f"{self.input_dir}results").mkdir(parents=True, exist_ok=True)
 
     def _build_train_ds(self):
         train_target_values = self.groups["train"]["data"].T

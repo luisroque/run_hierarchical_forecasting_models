@@ -31,7 +31,6 @@ class MinT:
         self.groups['train']['groups_idx'] = self._get_capitalized_keys(self.groups['train']['groups_idx'])
         self.groups['train']['groups_n'] = self._get_capitalized_keys(self.groups['train']['groups_n'])
         self.input_dir = input_dir
-        self._create_directories()
         dict_groups = {k.capitalize(): np.tile(groups['train']['groups_names'][k][groups['train']['groups_idx'][k]],
                                                (groups['predict']['n'], 1)).T.reshape(-1, ) for k in
                        [k for k, v in groups['train']['groups_n'].items()]}
@@ -70,10 +69,6 @@ class MinT:
         self.logger_metrics = Logger(
             "metrics", algorithm='mint', dataset=self.dataset, to_file=True, log_dir=log_dir
         )
-
-    def _create_directories(self):
-        # Create directory to store results if does not exist
-        Path(f'{self.input_dir}results').mkdir(parents=True, exist_ok=True)
 
     def train(self, algorithm='ets', rec_method='mint', track_mem=True):
         """Train ETS or ARIMA with conventional bottom-up or MinT reconciliation strategies
