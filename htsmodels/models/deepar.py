@@ -2,7 +2,6 @@ import pickle
 from datetime import timedelta
 import os
 import time
-from pathlib import Path
 import psutil
 
 import numpy as np
@@ -18,6 +17,7 @@ from gluonts.evaluation.backtest import make_evaluation_predictions
 
 from htsmodels.results.calculate_metrics import CalculateResultsBottomUp
 from htsmodels.utils.logger import Logger
+from htsmodels import __version__
 
 
 class DeepAR:
@@ -82,6 +82,8 @@ class DeepAR:
             to_file=True,
             log_dir=log_dir,
         )
+
+        self.model_version = __version__
 
     def _build_train_ds(self):
         train_target_values = self.groups["train"]["data"].T
@@ -182,7 +184,7 @@ class DeepAR:
 
     def store_metrics(self, res, track_mem=True):
         with open(
-            f"{self.input_dir}results_gp_cov_{self.dataset}.pickle", "wb"
+            f"{self.input_dir}results_gp_cov_{self.dataset}_{self.model_version}.pickle", "wb"
         ) as handle:
             if track_mem:
                 process = psutil.Process(os.getpid())

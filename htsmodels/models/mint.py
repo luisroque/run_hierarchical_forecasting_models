@@ -14,6 +14,7 @@ from rpy2.robjects.conversion import localconverter
 
 from htsmodels.results.calculate_metrics import CalculateResultsMint
 from htsmodels.utils.logger import Logger
+from htsmodels import __version__
 
 
 class MinT:
@@ -69,6 +70,8 @@ class MinT:
         self.logger_metrics = Logger(
             "metrics", algorithm='mint', dataset=self.dataset, to_file=True, log_dir=log_dir
         )
+
+        self.model_version = __version__
 
     def train(self, algorithm='ets', rec_method='mint', track_mem=True):
         """Train ETS or ARIMA with conventional bottom-up or MinT reconciliation strategies
@@ -223,7 +226,7 @@ class MinT:
         return pred_mint
 
     def store_metrics(self, res, track_mem=True):
-        with open(f"{self.input_dir}results_gp_cov_{self.dataset}.pickle", 'wb') as handle:
+        with open(f"{self.input_dir}results_gp_cov_{self.dataset}_{self.model_version}.pickle", 'wb') as handle:
             if track_mem:
                 process = psutil.Process(os.getpid())
                 mem = process.memory_info().rss / (1024**3)
