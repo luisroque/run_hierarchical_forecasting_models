@@ -61,3 +61,6 @@ results/
 dist/
 build/
 *.egg-info/
+
+**logs/
+**plots/

@@ -10,12 +10,7 @@ class TestModel(unittest.TestCase):
         self.data = tsag.preprocessing.PreprocessDatasets('police', top=2).apply_preprocess()
         self.n = self.data['predict']['n']
         self.s = self.data['train']['s']
-        shutil.rmtree("./data/original_datasets")
         self.mint = MinT(dataset='police', groups=self.data)
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree("./results")
 
     def test_correct_train(self):
         model = self.mint.train()

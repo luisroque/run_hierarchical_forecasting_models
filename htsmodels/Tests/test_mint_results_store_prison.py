@@ -11,9 +11,7 @@ class TestModel(unittest.TestCase):
         self.n = self.data['predict']['n']
         self.s = self.data['train']['s']
         shutil.rmtree("./data/original_datasets")
-        self.mint = MinT(dataset='prison', groups=self.data,
-                         store_prediction_samples=True,
-                         store_prediction_points=True)
+        self.mint = MinT(dataset='prison', groups=self.data)
 
     @classmethod
     def tearDownClass(cls):

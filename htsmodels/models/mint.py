@@ -1,25 +1,28 @@
+import pickle
+from datetime import datetime, timedelta
+import os
+import time
+from pathlib import Path
+import psutil
+
 import pandas as pd
+import numpy as np
 import rpy2.robjects as robjects
 from rpy2.robjects import pandas2ri
 import rpy2.robjects as ro
 from rpy2.robjects.conversion import localconverter
-import numpy as np
+
 from htsmodels.results.calculate_metrics import CalculateResultsMint
-import pickle
-from pathlib import Path
-from datetime import datetime
-import time
+from htsmodels.utils.logger import Logger
 
 
 class MinT:
 
-    def __init__(self, dataset, groups, aggregate_key=None, input_dir='./',
-                 store_prediction_samples=False, store_prediction_points=False):
+    def __init__(self, dataset, groups, aggregate_key=None, input_dir='./', log_dir: str = "."):
+
         self.dataset = dataset
         self.groups = groups
         self.timer_start = time.time()
-        self.wall_time_preprocess = None
-        self.wall_time_build_model = None
         self.wall_time_train = None
         self.wall_time_predict = None
         self.wall_time_total = None
@@ -37,8 +40,6 @@ class MinT:
         dict_groups['Date'] = np.tile(np.array(groups['dates']), (groups['train']['s'],))
         self.df = pd.DataFrame(dict_groups)
         self.algorithm = 'mint'
-        self.store_prediction_samples = store_prediction_samples
-        self.store_prediction_points = store_prediction_points
 
         time_interval = (self.groups['dates'][1] - self.groups['dates'][0]).days
         if time_interval < 2:
@@ -60,11 +61,21 @@ class MinT:
             # and no direct hierarchy (e.g. State / Region)
             self.aggregate_key = ' * '.join([k.capitalize() for k in self.groups['train']['groups_names']])
 
+        self.logger_train = Logger(
+            "train", algorithm='mint', dataset=self.dataset, to_file=True, log_dir=log_dir
+        )
+        self.logger_predict = Logger(
+            "predict", algorithm='mint', dataset=self.dataset, to_file=True, log_dir=log_dir
+        )
+        self.logger_metrics = Logger(
+            "metrics", algorithm='mint', dataset=self.dataset, to_file=True, log_dir=log_dir
+        )
+
     def _create_directories(self):
         # Create directory to store results if does not exist
         Path(f'{self.input_dir}results').mkdir(parents=True, exist_ok=True)
 
-    def train(self, algorithm='ets', rec_method='mint'):
+    def train(self, algorithm='ets', rec_method='mint', track_mem=True):
         """Train ETS or ARIMA with conventional bottom-up or MinT reconciliation strategies
 
         :param algorithm: ets or arima
@@ -72,7 +83,7 @@ class MinT:
             base means that we just forecast all time series without any reconciliation
         :return: df with results
         """
-        self.wall_time_preprocess = time.time() - self.timer_start
+        timer_start = time.time()
         robjects.r('''
             library('fpp3')
             results_fn <- function(df, time, h, string_aggregate, start_predict_date, algorithm, rec_method) {
@@ -168,9 +179,18 @@ class MinT:
         df_result[['lower']] = df_result[['lower']].astype('float')
         df_result[['upper']] = df_result[['upper']].astype('float')
         df_result[['std']] = df_result[['std']].astype('float')
-        self.wall_time_build_model = time.time() - self.timer_start - self.wall_time_preprocess
-        self.wall_time_train = time.time() - self.timer_start - self.wall_time_build_model
-        self.wall_time_predict = time.time() - self.timer_start - self.wall_time_train
+
+        if track_mem:
+            # Track RAM usage
+            process = psutil.Process(os.getpid())
+            mem = process.memory_info().rss / (1024 ** 3)
+            self.logger_train.info(f"train used {mem:.3f} GB of RAM")
+
+        self.wall_time_train = time.time() - self.timer_start
+        td = timedelta(seconds=int(time.time() - self.timer_start))
+        self.logger_train.info(f"wall time train {str(td)}")
+        self.wall_time_predict = 0
+
         return df_result
 
     @staticmethod
@@ -207,22 +227,32 @@ class MinT:
 
         return pred_mint
 
-    def store_metrics(self, res):
+    def store_metrics(self, res, track_mem=True):
         with open(f'{self.input_dir}results/results_gp_cov_{self.dataset}.pickle', 'wb') as handle:
+            if track_mem:
+                process = psutil.Process(os.getpid())
+                mem = process.memory_info().rss / (1024**3)
+                self.logger_metrics.info(
+                    f"Storing error metrics used {mem:.3f} GB of RAM"
+                )
             pickle.dump(res, handle, pickle.HIGHEST_PROTOCOL)
 
-    def metrics(self, df_results_mint):
+    def metrics(self, df_results_mint, track_mem=True):
         calc_results = CalculateResultsMint(df_results_mint=df_results_mint,
                                             groups=self.groups,
-                                            store_prediction_samples=self.store_prediction_samples,
-                                            store_prediction_points=self.store_prediction_points)
+                                            dataset=self.dataset)
         res = calc_results.calculate_metrics()
+        if track_mem:
+            process = psutil.Process(os.getpid())
+            mem = process.memory_info().rss / (1024**3)
+            self.logger_metrics.info(
+                f"calculating error metrics used {mem:.3f} GB of RAM"
+            )
+
         self.wall_time_total = time.time() - self.timer_start
 
-        res['wall_time'] = {}
-        res['wall_time']['wall_time_preprocess'] = self.wall_time_preprocess
-        res['wall_time']['wall_time_build_model'] = self.wall_time_build_model
-        res['wall_time']['wall_time_train'] = self.wall_time_train
-        res['wall_time']['wall_time_predict'] = self.wall_time_predict
-        res['wall_time']['wall_time_total'] = self.wall_time_total
+        res["wall_time"] = {}
+        res["wall_time"]["wall_time_train"] = self.wall_time_train
+        res["wall_time"]["wall_time_predict"] = self.wall_time_predict
+        res["wall_time"]["wall_time_total"] = self.wall_time_total
         return res
