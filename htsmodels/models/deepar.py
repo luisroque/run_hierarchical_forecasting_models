@@ -3,6 +3,7 @@ from datetime import timedelta
 import os
 import time
 import psutil
+from typing import Dict, Union, Tuple, Optional
 
 import numpy as np
 from tqdm import tqdm
@@ -182,9 +183,56 @@ class DeepAR:
         self.wall_time_predict = time.time() - timer_start
         return pred_mean, pred_std
 
-    def store_metrics(self, res, track_mem=True):
+    @staticmethod
+    def _validate_param(param, valid_values):
+        if param not in valid_values:
+            raise ValueError(f"{param} is not a valid value")
+
+    def store_results(
+        self,
+        res: np.ndarray,
+        res_type: str,
+        res_measure: str,
+        track_mem: bool = True,
+    ):
+        """
+        Store results
+
+        Parameters:
+            res: np array with the results with shape (n,s) - note that n depends of the res_type
+            res_type: defines the type of results, could be 'fit_pred' to receive fitted values plus
+                predictions or 'pred' to only store predictions
+            res_measure: defines the measure to store, could be 'mean' or 'std'
+
+        Returns:
+            numpy.ndarray: Array of shape (n_samples, n_prediction_points, n_groups)
+                containing the prediction samples.
+        """
+        """
+        Store results, res_type should be used to define the type of results,
+        could be 'fit_pred' to receive fitted values plus predictions or 'pred'
+        to only store predictions
+        """
+        self._validate_param(res_type, ['fitpred', 'pred'])
+        self._validate_param(res_measure, ['mean', 'std'])
         with open(
-            f"{self.input_dir}results_gp_cov_{self.dataset}_{self.model_version}.pickle", "wb"
+            f"{self.input_dir}results_{res_type}_{res_measure}_gp_cov_{self.dataset}_{self.model_version}.pickle",
+            "wb",
+        ) as handle:
+            if track_mem:
+                process = psutil.Process(os.getpid())
+                mem = process.memory_info().rss / (1024**3)
+                self.logger_metrics.info(f"Storing results used {mem:.3f} GB of RAM")
+            pickle.dump(res, handle, pickle.HIGHEST_PROTOCOL)
+
+    def store_metrics(
+        self,
+        res: Dict[str, Dict[str, Union[float, np.ndarray]]],
+        track_mem: bool = True,
+    ):
+        with open(
+            f"{self.input_dir}metrics_gp_cov_{self.dataset}_{self.model_version}.pickle",
+            "wb",
         ) as handle:
             if track_mem:
                 process = psutil.Process(os.getpid())
