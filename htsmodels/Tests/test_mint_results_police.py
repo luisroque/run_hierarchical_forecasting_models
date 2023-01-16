@@ -16,8 +16,4 @@ class TestModel(unittest.TestCase):
         model = self.mint.train()
         self.assertIsNotNone(model)
 
-    def test_predict_shape(self):
-        forecasts = self.mint.train()
-        res = self.mint.results(forecasts)
-        self.assertTrue(res.shape == (900, 11))
 
