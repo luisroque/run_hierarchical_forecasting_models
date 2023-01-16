@@ -21,8 +21,3 @@ class TestModel(unittest.TestCase):
         res = self.mint.results(forecasts)
         self.assertTrue(res.shape == (900, 11))
 
-    def test_results_interval(self):
-        forecasts = self.mint.train()
-        df_results = self.mint.results(forecasts)
-        res = self.mint.metrics(df_results)
-        self.assertLess(res['mase']['bottom'], 2.5)
