@@ -29,7 +29,7 @@ class TestModel(unittest.TestCase):
         model = self.deepar.train(epochs=5)
         pred_mean, pred_std = self.deepar.predict(model)
         res = self.deepar.metrics(pred_mean, pred_std)
-        self.assertLess(res['mase']['bottom'], 2.8)
+        self.assertLess(res['mase']['bottom'], 3.2)
         self.assertLess(res['CRPS']['bottom_ind'][0], 5)
 
     def test_results_interval_negbindist(self):

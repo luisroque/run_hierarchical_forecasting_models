@@ -39,7 +39,7 @@ class MinT:
             for k in [k for k, v in groups["train"]["groups_n"].items()]
         }
         train_data = groups["train"]["data"].reshape(groups["train"]["n"], -1)
-        groups["predict"]["data_matrix"][: groups["train"]["n"], :] = train_data
+        #groups["predict"]["data_matrix"][: groups["train"]["n"], :] = train_data
 
         dict_groups["Count"] = groups["predict"]["data_matrix"].T.reshape(
             -1,
@@ -239,6 +239,8 @@ class MinT:
 
             ordered_mean[:, s] = df_temp["mean"].to_numpy()
             ordered_std[:, s] = df_temp["std"].to_numpy()
+
+        self.groups['train']['data'] = self.groups['train']['data'].reshape(-1, self.groups['train']['s'])
 
         pred_mean = np.concatenate((self.groups["train"]["data"], ordered_mean), axis=0)
         pred_std = np.concatenate(
