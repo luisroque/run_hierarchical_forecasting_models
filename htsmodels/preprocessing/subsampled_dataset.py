@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 
-def update_missing_values(groups: dict):
+def update_missing_values(groups: dict, freq: str):
     """
     Update the missing values in the 'data', 'full_data', 'data_matrix', and 'dates' arrays with np.nan
 
@@ -43,7 +43,7 @@ def update_missing_values(groups: dict):
     dates = groups['dates']
     start_date = dates[0]
     end_date = dates[-1]
-    all_dates = pd.date_range(start_date, end_date, freq='QS')
+    all_dates = pd.date_range(start_date, end_date, freq=freq)
     missing_dates = all_dates.difference(pd.to_datetime(dates))
 
     for missing_date in missing_dates:

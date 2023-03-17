@@ -38,9 +38,6 @@ class MinT:
             )
             for k in [k for k, v in groups["train"]["groups_n"].items()]
         }
-        train_data = groups["train"]["data"].reshape(groups["train"]["n"], -1)
-        #groups["predict"]["data_matrix"][: groups["train"]["n"], :] = train_data
-
         dict_groups["Count"] = groups["predict"]["data_matrix"].T.reshape(
             -1,
         )
