@@ -40,6 +40,7 @@ class DeepAR:
         self.stat_cat_cardinalities = [
             v for k, v in self.groups["train"]["groups_n"].items()
         ]
+        self.groups['train']['data'] = self.groups['train']['data'].reshape(-1, self.groups['train']['s'])
         self.stat_cat = np.concatenate(
             ([v.reshape(-1, 1) for k, v in self.groups["train"]["groups_idx"].items()]),
             axis=1,
@@ -47,21 +48,29 @@ class DeepAR:
         self.dates = [groups["dates"][0] for _ in range(groups["train"]["s"])]
         self.n_samples = n_samples
 
-        time_interval = (self.groups["dates"][1] - self.groups["dates"][0]).days
-        if time_interval < 8:
-            self.time_int = "W"
-        elif time_interval < 32:
-            self.time_int = "M"
-        elif time_interval < 93:
-            self.time_int = "Q"
-        elif time_interval < 367:
-            self.time_int = "Y"
+        self.time_int = self._determine_time_interval()
 
         self.n_train = groups["train"]["n"]
         self.n_predict = groups["predict"]["n"]
         self.s = groups["train"]["s"]
         self.h = groups["h"]
 
+        self._initialize_loggers(log_dir)
+
+        self.model_version = __version__
+
+    def _determine_time_interval(self):
+        time_interval = (self.groups["dates"][1] - self.groups["dates"][0]).days
+        if time_interval < 8:
+            return "W"
+        elif time_interval < 32:
+            return "M"
+        elif time_interval < 93:
+            return "Q"
+        elif time_interval < 367:
+            return "Y"
+
+    def _initialize_loggers(self, log_dir):
         self.logger_train = Logger(
             "train",
             algorithm="deepar",
@@ -84,15 +93,13 @@ class DeepAR:
             log_dir=log_dir,
         )
 
-        self.model_version = __version__
-
     def _build_train_ds(self):
         train_target_values = self.groups["train"]["data"].T
 
         train_ds = ListDataset(
             [
                 {
-                    FieldName.TARGET: target,
+                    FieldName.TARGET: target.reshape(-1),
                     FieldName.START: start,
                     FieldName.FEAT_STATIC_CAT: fsc,
                 }
@@ -129,10 +136,7 @@ class DeepAR:
     def train(self, lr=1e-3, epochs=100, dist="Gaussian"):
         train_ds = self._build_train_ds()
 
-        if dist == "NegativeBinomial":
-            distribution = NegativeBinomialOutput()
-        else:
-            distribution = GaussianOutput()
+        distribution = self._select_distribution(dist)
 
         estimator = DeepAREstimator(
             prediction_length=self.groups["h"],
@@ -150,6 +154,13 @@ class DeepAR:
         td = timedelta(seconds=int(time.time() - self.timer_start))
         self.logger_train.info(f"wall time train {str(td)}")
         return model
+
+    @staticmethod
+    def _select_distribution(dist):
+        if dist == "NegativeBinomial":
+            return NegativeBinomialOutput()
+        else:
+            return GaussianOutput()
 
     def predict(self, model, track_mem=True):
         timer_start = time.time()
@@ -213,8 +224,8 @@ class DeepAR:
         could be 'fit_pred' to receive fitted values plus predictions or 'pred'
         to only store predictions
         """
-        self._validate_param(res_type, ['fitpred', 'pred'])
-        self._validate_param(res_measure, ['mean', 'std'])
+        self._validate_param(res_type, ["fitpred", "pred"])
+        self._validate_param(res_measure, ["mean", "std"])
         with open(
             f"{self.input_dir}results_{res_type}_{res_measure}_gp_cov_{self.dataset}_{self.model_version}.pickle",
             "wb",

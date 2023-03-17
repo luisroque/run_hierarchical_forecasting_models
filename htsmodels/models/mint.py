@@ -38,9 +38,9 @@ class MinT:
             )
             for k in [k for k, v in groups["train"]["groups_n"].items()]
         }
-        groups["predict"]["data_matrix"][: groups["train"]["n"], :] = groups["train"][
-            "data"
-        ]
+        train_data = groups["train"]["data"].reshape(groups["train"]["n"], -1)
+        groups["predict"]["data_matrix"][: groups["train"]["n"], :] = train_data
+
         dict_groups["Count"] = groups["predict"]["data_matrix"].T.reshape(
             -1,
         )
@@ -150,8 +150,7 @@ class MinT:
                 relocate(Time)
               
               data_gts <- data %>%
-                aggregate_key(.spec = !!rlang::parse_expr(string_aggregate), Count = sum(Count))
-              
+                aggregate_key(.spec = !!rlang::parse_expr(string_aggregate), Count = sum(Count, na.rm = TRUE))              
               fit <- data_gts %>%
                 filter(Time <= fn(as.Date(start_predict_date))) %>%
                   model(base = algo_fn(Count)) %>%
