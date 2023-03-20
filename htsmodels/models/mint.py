@@ -38,7 +38,10 @@ class MinT:
             )
             for k in [k for k, v in groups["train"]["groups_n"].items()]
         }
-        dict_groups["Count"] = groups["predict"]["data_matrix"].T.reshape(
+        self.groups['train']['data'] = self.groups['train']['data'].reshape(-1, self.groups['train']['s'])
+
+        data = np.concatenate((self.groups['train']['data'], groups["predict"]["data_matrix"][-self.groups['h']:]), axis=0)
+        dict_groups["Count"] = data.T.reshape(
             -1,
         )
         dict_groups["Date"] = np.tile(
