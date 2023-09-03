@@ -9,7 +9,7 @@ class TestModel(unittest.TestCase):
 
     def setUp(self):
         self.dataset_name = "prison"
-        self.data = tsag.preprocessing.PreprocessDatasets(self.dataset_name).apply_preprocess()
+        self.data = tsag.preprocessing.PreprocessDatasets(self.dataset_name, 'Q').apply_preprocess()
         self.n = self.data['predict']['n']
         self.s = self.data['train']['s']
         self.h = self.data['h']

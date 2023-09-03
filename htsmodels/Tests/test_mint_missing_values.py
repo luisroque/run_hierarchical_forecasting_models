@@ -7,8 +7,8 @@ from htsmodels.preprocessing.subsampled_dataset import update_missing_values
 class TestModel(unittest.TestCase):
 
     def setUp(self):
-        self.data = tsag.preprocessing.CreateGroups('prison', 0.75).read_subsampled_groups()
-        self.data_orig = tsag.preprocessing.CreateGroups('prison').read_original_groups()
+        self.data = tsag.preprocessing.CreateGroups('prison', 'Q', 0.75).read_subsampled_groups()
+        self.data_orig = tsag.preprocessing.CreateGroups('prison', 'Q').read_original_groups()
         self.data_w_missing_values = update_missing_values(self.data, freq='QS')
         self.data_w_missing_values['predict'] = self.data_orig['predict']
         self.mint = MinT(dataset='prison', groups=self.data_w_missing_values)

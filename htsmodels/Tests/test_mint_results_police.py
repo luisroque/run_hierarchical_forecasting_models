@@ -7,7 +7,7 @@ import shutil
 class TestModel(unittest.TestCase):
 
     def setUp(self):
-        self.data = tsag.preprocessing.PreprocessDatasets('police', top=2).apply_preprocess()
+        self.data = tsag.preprocessing.PreprocessDatasets('police', 'Q', top=2).apply_preprocess()
         self.n = self.data['predict']['n']
         self.s = self.data['train']['s']
         self.mint = MinT(dataset='police', groups=self.data)

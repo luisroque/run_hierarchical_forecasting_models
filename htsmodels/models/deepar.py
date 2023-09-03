@@ -40,7 +40,9 @@ class DeepAR:
         self.stat_cat_cardinalities = [
             v for k, v in self.groups["train"]["groups_n"].items()
         ]
-        self.groups['train']['data'] = self.groups['train']['data'].reshape(-1, self.groups['train']['s'])
+        self.groups["train"]["data"] = self.groups["train"]["data"].reshape(
+            -1, self.groups["train"]["s"]
+        )
         self.stat_cat = np.concatenate(
             ([v.reshape(-1, 1) for k, v in self.groups["train"]["groups_idx"].items()]),
             axis=1,
@@ -115,7 +117,7 @@ class DeepAR:
     def _build_test_ds(self):
         test_target_values = self.groups["predict"]["data"].reshape(
             self.groups["predict"]["s"], self.groups["predict"]["n"]
-        )
+        )[:, -self.h :]
 
         test_ds = ListDataset(
             [
