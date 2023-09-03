@@ -29,14 +29,15 @@ class TestModel(unittest.TestCase):
         model = self.deepar.train(epochs=5)
         pred_mean, pred_std = self.deepar.predict(model)
         res = self.deepar.metrics(pred_mean, pred_std)
-        self.assertLess(res['mase']['bottom'], 20)
-        self.assertLess(res['CRPS']['bottom_ind'][0], 20)
+        self.assertLess(res['mase']['bottom'], 3)
+        self.assertLess(res['CRPS']['bottom_ind'][0], 5)
 
     def test_results_interval_negbindist(self):
         model = self.deepar.train(epochs=5, dist='NegativeBinomial')
         pred_mean, pred_std = self.deepar.predict(model)
         res = self.deepar.metrics(pred_mean, pred_std)
-        self.assertLess(res['mase']['bottom'], 20)
+        self.assertLess(res['mase']['bottom'], 3)
+        self.assertLess(res['CRPS']['bottom_ind'][0], 5)
 
     def test_store_pred_std_results_deepar(self):
         model = self.deepar.train(epochs=5)

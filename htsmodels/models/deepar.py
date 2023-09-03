@@ -115,9 +115,15 @@ class DeepAR:
         return train_ds
 
     def _build_test_ds(self):
-        test_target_values = self.groups["predict"]["data"].reshape(
-            self.groups["predict"]["s"], self.groups["predict"]["n"]
-        )[:, -self.h :]
+        nan_array = np.empty((self.groups["train"]["data"].shape[1], self.h))
+        nan_array[:] = np.nan
+        test_target_values = np.concatenate(
+            (
+                self.groups["train"]["data"].T,
+                nan_array,
+            ),
+            axis=1,
+        )
 
         test_ds = ListDataset(
             [
