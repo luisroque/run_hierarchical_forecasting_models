@@ -29,6 +29,9 @@ class CalculateResultsBase:
         self.dataset = dataset
         self.mase = MeanAbsoluteScaledError(multioutput="raw_values")
 
+        if self.n < self.seas:
+            self.seas = 1
+
     def calculate_metrics_for_individual_group(
         self, group_name, y, predictions_mean, predictions_std, error_metrics
     ):
