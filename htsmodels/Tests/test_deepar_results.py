@@ -1,7 +1,7 @@
 import unittest
 import pickle
 import tsaugmentation as tsag
-from htsmodels.models.deepar import DeepAR
+from htsmodels.models.gluon_models import DeepAR
 from htsmodels import __version__
 
 

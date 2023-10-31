@@ -1,6 +1,6 @@
 import unittest
 import tsaugmentation as tsag
-from htsmodels.models.deepar import DeepAR
+from htsmodels.models.gluon_models import DeepAR
 from htsmodels.preprocessing.subsampled_dataset import update_missing_values
 
 
