@@ -348,7 +348,7 @@ class DeepVARHierarchical(BaseModel):
     def _select_distribution(self, dist: str):
         pass
 
-    def train(self, lr=1e-3, epochs=100):
+    def train(self, lr=1e-3, epochs=100, batch_size=32):
         """
         Train the DeepVAR model with the given hyperparameters.
         """
@@ -360,6 +360,7 @@ class DeepVARHierarchical(BaseModel):
             freq=self.time_int,
             use_feat_dynamic_real=False,
             cardinality=self.stat_cat_cardinalities,
+            batch_size=batch_size,
             trainer=Trainer(learning_rate=lr, epochs=epochs, num_batches_per_epoch=50),
             target_dim=hts_train.num_ts,
             S=hts_train.S,
