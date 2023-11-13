@@ -23,6 +23,7 @@ from gluonts.mx.distribution import (
 from gluonts.mx.model.deepvar import DeepVAREstimator
 from gluonts.dataset.hierarchical import HierarchicalTimeSeries
 from gluonts.mx.model.deepvar_hierarchical import DeepVARHierarchicalEstimator
+from gluonts.mx.model.tft import TemporalFusionTransformerEstimator
 
 from htsmodels.results.calculate_metrics import CalculateResultsBottomUp
 from htsmodels.utils.logger import Logger
@@ -41,6 +42,8 @@ class BaseModel(ABC):
         self.stat_cat_cardinalities = [
             v for k, v in self.groups["train"]["groups_n"].items()
         ]
+        self.stat_cat_cardinalities_dict = self.groups["train"]["groups_n"]
+        self.stat_cat_cardinalities_dict_idx = self.groups["train"]["groups_idx"]
         self.groups["train"]["data"] = self.groups["train"]["data"].reshape(
             -1, self.groups["train"]["s"]
         )
@@ -80,23 +83,51 @@ class BaseModel(ABC):
             log_dir=log_dir,
         )
 
+    def _build_cardinality_dict(self):
+        return self.groups["train"]["groups_idx"].items()
+
+    @staticmethod
+    def _wrap_transformed_features(transformed_data):
+        # Determine the length of the features (number of columns in the arrays)
+        feature_length = len(transformed_data[list(transformed_data.keys())[0]][0])
+        wrapped_list = []
+
+        for i in range(feature_length):
+            # Create a dictionary for each feature vector
+            feature_dict = {
+                key: transformed_data[key][:, i] for key in transformed_data
+            }
+            wrapped_list.append(feature_dict)
+
+        return wrapped_list
+
     def _build_train_ds(self):
         """
         Constructs the training dataset.
         """
         train_target_values = self.groups["train"]["data"].T
-
-        train_ds = ListDataset(
-            [
+        train_data = []
+        entry_idx = 0
+        for (target, start, static_features_agg) in zip(
+            train_target_values,
+            self.dates,
+            self.stat_cat,
+        ):
+            train_data.append(
                 {
                     FieldName.TARGET: target.reshape(-1),
                     FieldName.START: start,
-                    FieldName.FEAT_STATIC_CAT: fsc,
+                    FieldName.FEAT_STATIC_CAT: static_features_agg,
+                    **{
+                        f"{k}": np.array(v[entry_idx]).reshape(-1,)
+                        for k, v in self.stat_cat_cardinalities_dict_idx.items()
+                    },
                 }
-                for (target, start, fsc) in zip(
-                    train_target_values, self.dates, self.stat_cat
-                )
-            ],
+            )
+            entry_idx += 1
+
+        train_ds = ListDataset(
+            train_data,
             freq=self.time_int,
         )
 
@@ -116,17 +147,29 @@ class BaseModel(ABC):
             axis=1,
         )
 
-        test_ds = ListDataset(
-            [
+        entry_idx = 0
+        test_data = []
+
+        for (target, start, static_features_agg) in zip(
+            test_target_values,
+            self.dates,
+            self.stat_cat,
+        ):
+            test_data.append(
                 {
-                    FieldName.TARGET: target,
+                    FieldName.TARGET: target.reshape(-1),
                     FieldName.START: start,
-                    FieldName.FEAT_STATIC_CAT: fsc,
+                    FieldName.FEAT_STATIC_CAT: static_features_agg,
+                    **{
+                        f"{k}": np.array(v[entry_idx]).reshape(-1,)
+                        for k, v in self.stat_cat_cardinalities_dict_idx.items()
+                    },
                 }
-                for (target, start, fsc) in zip(
-                    test_target_values, self.dates, self.stat_cat
-                )
-            ],
+            )
+            entry_idx += 1
+
+        test_ds = ListDataset(
+            test_data,
             freq=self.time_int,
         )
 
@@ -384,12 +427,83 @@ class DeepVARHierarchical(BaseModel):
         forecasts = list(tqdm(forecast_it, total=self.h))
 
         pred_mean = np.concatenate(
-                (self.groups["train"]["data"], forecasts[0].mean[:, -self.s :]), axis=0
-            )
+            (self.groups["train"]["data"], forecasts[0].mean[:, -self.s :]), axis=0
+        )
         pred_std = np.concatenate(
-                (np.zeros((self.n_train, self.s)), np.std(forecasts[0].samples, axis=0)[:, -self.s :]),
-                axis=0,
-            )
+            (
+                np.zeros((self.n_train, self.s)),
+                np.std(forecasts[0].samples, axis=0)[:, -self.s :],
+            ),
+            axis=0,
+        )
+
+        self.wall_time_predict = time.time() - timer_start
+        return pred_mean, pred_std
+
+
+class TFT(BaseModel):
+    def __init__(self, *args, **kwargs):
+        self.algorithm_name = "tft"
+        super().__init__(*args, **kwargs)
+
+    def _select_distribution(self, dist: str):
+        pass
+
+    def train(self, lr=1e-3, epochs=100, dist="Gaussian"):
+        """
+        Train the TFT model with the given hyperparameters.
+        """
+        train_ds = self._build_train_ds()
+
+        estimator = TemporalFusionTransformerEstimator(
+            prediction_length=self.h,
+            freq=self.time_int,
+            static_cardinalities=self.stat_cat_cardinalities_dict,
+            trainer=Trainer(learning_rate=lr, epochs=epochs, num_batches_per_epoch=50),
+        )
+
+        model = estimator.train(train_ds)
+        self.wall_time_train = time.time() - self.timer_start
+        td = timedelta(seconds=int(time.time() - self.timer_start))
+        self.logger.info(f"wall time train {str(td)}")
+        return model
+
+    def predict(self, model):
+        timer_start = time.time()
+        test_ds = self._build_test_ds()
+
+        forecast_it, ts_it = make_evaluation_predictions(
+            dataset=test_ds, predictor=model, num_samples=self.n_samples
+        )
+        print("Obtaining time series predictions ...")
+        forecasts = list(tqdm(forecast_it, total=len(test_ds)))
+
+        pred_mean = np.zeros((self.n_predict, self.s))
+        pred_std = np.zeros((self.n_predict, self.s))
+
+        for ts, forecast in enumerate(forecasts):
+            # Concatenate the mean predictions
+            if hasattr(forecast, 'mean'):
+                pred_mean[:, ts] = np.concatenate(
+                    (self.groups["train"]["data"][:, ts], forecast.mean), axis=0
+                )
+
+            # Estimate the standard deviation if forecast is a QuantileForecast
+            if hasattr(forecast, 'quantile'):
+                q10 = forecast.quantile('0.1')
+                q90 = forecast.quantile('0.9')
+                spread = q90 - q10
+                estimated_std_dev = spread / 1.645
+                pred_std[:, ts] = np.concatenate(
+                    (np.zeros((self.n_train,)), estimated_std_dev), axis=0
+                )
+            else:
+                # Fall back to standard deviation of samples if available
+                if hasattr(forecast, 'samples'):
+                    pred_std[:, ts] = np.concatenate(
+                        (np.zeros((self.n_train,)), np.std(forecast.samples, axis=0)),
+                        axis=0,
+                    )
 
         self.wall_time_predict = time.time() - timer_start
         return pred_mean, pred_std
