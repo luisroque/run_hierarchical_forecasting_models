@@ -17,10 +17,6 @@ from gluonts.mx.distribution.neg_binomial import NegativeBinomialOutput
 from gluonts.mx.distribution.gaussian import GaussianOutput
 from gluonts.mx.trainer import Trainer
 from gluonts.evaluation.backtest import make_evaluation_predictions
-from gluonts.mx.distribution import (
-    LowrankMultivariateGaussianOutput,
-)
-from gluonts.mx.model.deepvar import DeepVAREstimator
 from gluonts.dataset.hierarchical import HierarchicalTimeSeries
 from gluonts.mx.model.deepvar_hierarchical import DeepVARHierarchicalEstimator
 from gluonts.mx.model.tft import TemporalFusionTransformerEstimator
@@ -28,6 +24,19 @@ from gluonts.mx.model.tft import TemporalFusionTransformerEstimator
 from htsmodels.results.calculate_metrics import CalculateResultsBottomUp
 from htsmodels.utils.logger import Logger
 from htsmodels import __version__
+import mxnet as mx
+
+
+def get_mxnet_context():
+    try:
+        # Try to create a dummy array on GPU(0)
+        _ = mx.nd.array([0], ctx=mx.gpu(0))
+        return mx.gpu(0)
+    except mx.MXNetError:
+        return mx.cpu()
+
+
+mxnet_context = get_mxnet_context()
 
 
 class BaseModel(ABC):
@@ -349,6 +358,7 @@ class DeepAR(BaseModel):
             use_feat_static_cat=True,
             cardinality=self.stat_cat_cardinalities,
             trainer=Trainer(learning_rate=lr, epochs=epochs, num_batches_per_epoch=50),
+            ctx=mxnet_context
         )
 
         model = estimator.train(train_ds)
@@ -407,6 +417,7 @@ class DeepVARHierarchical(BaseModel):
             trainer=Trainer(learning_rate=lr, epochs=epochs, num_batches_per_epoch=50),
             target_dim=hts_train.num_ts,
             S=hts_train.S,
+            ctx=mxnet_context
         )
 
         model = estimator.train(train_ds)
@@ -460,6 +471,7 @@ class TFT(BaseModel):
             freq=self.time_int,
             static_cardinalities=self.stat_cat_cardinalities_dict,
             trainer=Trainer(learning_rate=lr, epochs=epochs, num_batches_per_epoch=50),
+            ctx=mxnet_context
         )
 
         model = estimator.train(train_ds)

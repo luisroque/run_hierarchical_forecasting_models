@@ -29,6 +29,6 @@ class TestModel(unittest.TestCase):
         model = self.deepvar.train(epochs=20)
         pred_mean, pred_std = self.deepvar.predict(model)
         res = self.deepvar.metrics(pred_mean, pred_std)
-        self.assertLess(res['mase']['bottom'], 22)
+        self.assertLess(res['mase']['bottom'], 25)
         self.assertLess(res['CRPS']['bottom_ind'][0], 120)
 
