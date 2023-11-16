@@ -128,7 +128,9 @@ class BaseModel(ABC):
                     FieldName.START: start,
                     FieldName.FEAT_STATIC_CAT: static_features_agg,
                     **{
-                        f"{k}": np.array(v[entry_idx]).reshape(-1,)
+                        f"{k}": np.array(v[entry_idx]).reshape(
+                            -1,
+                        )
                         for k, v in self.stat_cat_cardinalities_dict_idx.items()
                     },
                 }
@@ -170,7 +172,9 @@ class BaseModel(ABC):
                     FieldName.START: start,
                     FieldName.FEAT_STATIC_CAT: static_features_agg,
                     **{
-                        f"{k}": np.array(v[entry_idx]).reshape(-1,)
+                        f"{k}": np.array(v[entry_idx]).reshape(
+                            -1,
+                        )
                         for k, v in self.stat_cat_cardinalities_dict_idx.items()
                     },
                 }
@@ -357,8 +361,13 @@ class DeepAR(BaseModel):
             use_feat_dynamic_real=False,
             use_feat_static_cat=True,
             cardinality=self.stat_cat_cardinalities,
-            trainer=Trainer(learning_rate=lr, epochs=epochs, num_batches_per_epoch=50),
-            ctx=mxnet_context
+            trainer=Trainer(
+                learning_rate=lr,
+                epochs=epochs,
+                num_batches_per_epoch=50,
+                ctx=mxnet_context,
+            ),
+            ctx=mxnet_context,
         )
 
         model = estimator.train(train_ds)
@@ -414,10 +423,14 @@ class DeepVARHierarchical(BaseModel):
             use_feat_dynamic_real=False,
             cardinality=self.stat_cat_cardinalities,
             batch_size=batch_size,
-            trainer=Trainer(learning_rate=lr, epochs=epochs, num_batches_per_epoch=50),
+            trainer=Trainer(
+                learning_rate=lr,
+                epochs=epochs,
+                num_batches_per_epoch=50,
+                ctx=mxnet_context,
+            ),
             target_dim=hts_train.num_ts,
             S=hts_train.S,
-            ctx=mxnet_context
         )
 
         model = estimator.train(train_ds)
@@ -470,8 +483,12 @@ class TFT(BaseModel):
             prediction_length=self.h,
             freq=self.time_int,
             static_cardinalities=self.stat_cat_cardinalities_dict,
-            trainer=Trainer(learning_rate=lr, epochs=epochs, num_batches_per_epoch=50),
-            ctx=mxnet_context
+            trainer=Trainer(
+                learning_rate=lr,
+                epochs=epochs,
+                num_batches_per_epoch=50,
+                ctx=mxnet_context,
+            ),
         )
 
         model = estimator.train(train_ds)
@@ -495,15 +512,15 @@ class TFT(BaseModel):
 
         for ts, forecast in enumerate(forecasts):
             # Concatenate the mean predictions
-            if hasattr(forecast, 'mean'):
+            if hasattr(forecast, "mean"):
                 pred_mean[:, ts] = np.concatenate(
                     (self.groups["train"]["data"][:, ts], forecast.mean), axis=0
                 )
 
             # Estimate the standard deviation if forecast is a QuantileForecast
-            if hasattr(forecast, 'quantile'):
-                q10 = forecast.quantile('0.1')
-                q90 = forecast.quantile('0.9')
+            if hasattr(forecast, "quantile"):
+                q10 = forecast.quantile("0.1")
+                q90 = forecast.quantile("0.9")
                 spread = q90 - q10
                 estimated_std_dev = spread / 1.645
                 pred_std[:, ts] = np.concatenate(
@@ -511,7 +528,7 @@ class TFT(BaseModel):
                 )
             else:
                 # Fall back to standard deviation of samples if available
-                if hasattr(forecast, 'samples'):
+                if hasattr(forecast, "samples"):
                     pred_std[:, ts] = np.concatenate(
                         (np.zeros((self.n_train,)), np.std(forecast.samples, axis=0)),
                         axis=0,
