@@ -367,7 +367,6 @@ class DeepAR(BaseModel):
                 num_batches_per_epoch=50,
                 ctx=mxnet_context,
             ),
-            ctx=mxnet_context,
         )
 
         model = estimator.train(train_ds)
