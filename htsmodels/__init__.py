@@ -1,4 +1,4 @@
-__version__ = "0.3.27"
+__version__ = "0.3.28"
 
 from htsmodels import models
 from htsmodels import results

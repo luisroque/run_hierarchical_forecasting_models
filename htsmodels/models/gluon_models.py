@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 from tqdm import tqdm
 import pandas as pd
+from sklearn.preprocessing import StandardScaler
 
 from gluonts.dataset.common import ListDataset
 from gluonts.dataset.field_names import FieldName
@@ -25,6 +26,9 @@ from htsmodels.results.calculate_metrics import CalculateResultsBottomUp
 from htsmodels.utils.logger import Logger
 from htsmodels import __version__
 import mxnet as mx
+import optuna
+from functools import partial
+from sktime.performance_metrics.forecasting import MeanAbsoluteScaledError
 
 
 def get_mxnet_context():
@@ -40,7 +44,15 @@ mxnet_context = get_mxnet_context()
 
 
 class BaseModel(ABC):
-    def __init__(self, dataset, groups, input_dir="./", n_samples=200, log_dir="."):
+    def __init__(
+        self,
+        dataset,
+        groups,
+        input_dir="./",
+        n_samples=200,
+        log_dir=".",
+        validation_ratio=0.1,
+    ):
         self.dataset = dataset
         self.groups = groups
         self.timer_start = time.time()
@@ -69,8 +81,40 @@ class BaseModel(ABC):
         self.h = groups["h"]
         self._initialize_loggers(log_dir)
         self.model_version = __version__
+        self.scaler = StandardScaler()
 
         self.S = self.construct_aggregation_matrix()
+        self.seasonality = self.groups["seasonality"]
+
+        # Split the data into training and validation sets
+        train_data, validation_data, train_dates, validation_dates = self._split_data(
+            groups, self.h
+        )
+
+        # store the training + validation, which in this case is the validation set
+        # because GluonTS requires it to be the concatenation of both
+        self.groups["train"]["dates"] = validation_dates
+        # smaller subset of the data to be used for validation purposes
+        self.groups["train_val"] = {"data": train_data, "dates": train_dates}
+        # validation needs to be the concatenation of train and validation for GluonTS
+        self.groups["validation"] = {"data": validation_data, "dates": validation_dates}
+        self.mase = MeanAbsoluteScaledError(multioutput="raw_values")
+
+    @staticmethod
+    def _split_data(groups, validation_length):
+        total_length = groups["train"]["data"].shape[0]
+        train_length = total_length - validation_length
+
+        train_data = groups["train"]["data"][:train_length]
+        original_validation_data = groups["train"]["data"][train_length:]
+
+        # Concatenating training data with original validation data for the new validation set
+        validation_data = np.concatenate((train_data, original_validation_data))
+
+        train_dates = groups["dates"][:train_length]
+        validation_dates = groups["dates"][:total_length]
+
+        return train_data, validation_data, train_dates, validation_dates
 
     def _determine_time_interval(self):
         time_interval = (self.groups["dates"][1] - self.groups["dates"][0]).days
@@ -91,6 +135,22 @@ class BaseModel(ABC):
             to_file=True,
             log_dir=log_dir,
         )
+
+    def scale_train_data(self, data):
+        """Fit and transform the training data"""
+        return self.scaler.fit_transform(data)
+
+    def scale_test_data(self, data):
+        """Transform the test data using the scaler fitted on the training data"""
+        return self.scaler.transform(data)
+
+    def inverse_scale_data(self, scaled_data):
+        """Inverse transform the data"""
+        return self.scaler.inverse_transform(scaled_data)
+
+    def inverse_scale_std(self, scaled_std):
+        """Inverse transform the standard deviation of the predictions"""
+        return scaled_std * self.scaler.scale_
 
     def _build_cardinality_dict(self):
         return self.groups["train"]["groups_idx"].items()
@@ -143,6 +203,84 @@ class BaseModel(ABC):
         )
 
         return train_ds
+
+    def _build_train_val_ds(self):
+        """
+        Constructs the training dataset for validation purposes.
+        """
+        train_target_values = self.groups["train_val"]["data"].T
+        train_data = []
+        entry_idx = 0
+        for (target, start, static_features_agg) in zip(
+            train_target_values,
+            self.dates,
+            self.stat_cat,
+        ):
+            train_data.append(
+                {
+                    FieldName.TARGET: target.reshape(-1),
+                    FieldName.START: start,
+                    FieldName.FEAT_STATIC_CAT: static_features_agg,
+                    **{
+                        f"{k}": np.array(v[entry_idx]).reshape(
+                            -1,
+                        )
+                        for k, v in self.stat_cat_cardinalities_dict_idx.items()
+                    },
+                }
+            )
+            entry_idx += 1
+
+        train_ds = ListDataset(
+            train_data,
+            freq=self.time_int,
+        )
+
+        return train_ds
+
+    def _build_validation_ds(self):
+        """
+        Constructs the testing dataset
+        """
+        nan_array = np.empty((self.groups["train_val"]["data"].shape[1], self.h))
+        nan_array[:] = np.nan
+        val_target_values = np.concatenate(
+            (
+                self.groups["train_val"]["data"].T,
+                nan_array,
+            ),
+            axis=1,
+        )
+
+        entry_idx = 0
+        val_data = []
+
+        for (target, start, static_features_agg) in zip(
+            val_target_values,
+            self.dates,
+            self.stat_cat,
+        ):
+            val_data.append(
+                {
+                    FieldName.TARGET: target.reshape(-1),
+                    FieldName.START: start,
+                    FieldName.FEAT_STATIC_CAT: static_features_agg,
+                    **{
+                        f"{k}": np.array(v[entry_idx]).reshape(
+                            -1,
+                        )
+                        for k, v in self.stat_cat_cardinalities_dict_idx.items()
+                    },
+                }
+            )
+            entry_idx += 1
+
+        val_ds = ListDataset(
+            val_data,
+            freq=self.time_int,
+        )
+
+        return val_ds
 
     def _build_test_ds(self):
         """
@@ -214,7 +352,7 @@ class BaseModel(ABC):
         Constructs the training dataset.
         """
         df = pd.DataFrame(
-            self.groups["train"]["data"], index=self.groups["dates"][: -self.h]
+            self.groups["train"]["data"], index=self.groups["train"]["dates"]
         )
         df.index = pd.PeriodIndex(df.index, freq=self.time_int)
 
@@ -224,6 +362,35 @@ class BaseModel(ABC):
         )
 
         return hts_train
+
+    def _build_train_val_ds_multivariate(self):
+        """
+        Constructs the training dataset for validation purposes.
+        """
+        df = pd.DataFrame(
+            self.groups["train_val"]["data"], index=self.groups["train_val"]["dates"]
+        )
+        df.index = pd.PeriodIndex(df.index, freq=self.time_int)
+
+        hts_train = HierarchicalTimeSeries(
+            ts_at_bottom_level=df,
+            S=self.S,
+        )
+
+        return hts_train
+
+    def _build_validation_ds_multivariate(self):
+        df_validation = pd.DataFrame(
+            self.groups["validation"]["data"], index=self.groups["validation"]["dates"]
+        )
+        df_validation.index = pd.PeriodIndex(df_validation.index, freq=self.time_int)
+
+        hts_validation = HierarchicalTimeSeries(
+            ts_at_bottom_level=df_validation,
+            S=self.S,
+        )
+
+        return hts_validation
 
     def _build_test_ds_multivariate(self):
         """
@@ -332,6 +499,42 @@ class BaseModel(ABC):
     def predict(self, *args, **kwargs):
         pass
 
+    def optimize_hyperparams(
+        self, evaluation_function, validation_data, n_trials=20, epochs=20
+    ):
+        def objective(trial, validation_data):
+            lr = trial.suggest_loguniform("lr", 1e-4, 1e-2)
+            batch_size = trial.suggest_categorical("batch_size", [4, 8, 16])
+            num_layers = trial.suggest_int("num_layers", 1, 4)
+            num_cells = trial.suggest_int("num_cells", 10, 40)
+            cell_type = trial.suggest_categorical("cell_type", ["lstm", "gru"])
+            likelihood_weight = trial.suggest_uniform("likelihood_weight", 0.0, 1.0)
+            CRPS_weight = trial.suggest_uniform("CRPS_weight", 0.0, 1.0)
+            embedding_dimension = trial.suggest_int("embedding_dimension", 1, 10)
+
+            model = self.train(
+                lr=lr,
+                epochs=epochs,
+                batch_size=batch_size,
+                num_layers=num_layers,
+                num_cells=num_cells,
+                cell_type=cell_type,
+                likelihood_weight=likelihood_weight,
+                CRPS_weight=CRPS_weight,
+                embedding_dimension=embedding_dimension,
+            )
+            metric = evaluation_function(model=model, validation_data=validation_data)
+            return metric
+
+        study = optuna.create_study(direction="minimize")
+        objective_with_data = partial(objective, validation_data=validation_data)
+        study.optimize(objective_with_data, n_trials=n_trials)
+
+        self.logger.info(f"Best hyperparameters: {study.best_params}")
+        self.logger.info(f"Best validation metric: {study.best_value}")
+
+        return study.best_params, study.best_value
+
 
 class DeepAR(BaseModel):
     def __init__(self, *args, **kwargs):
@@ -409,12 +612,28 @@ class DeepVARHierarchical(BaseModel):
     def _select_distribution(self, dist: str):
         pass
 
-    def train(self, lr=1e-3, epochs=100, batch_size=32):
+    def train(
+        self,
+        lr=1e-3,
+        epochs=100,
+        batch_size=4,
+        num_layers=2,
+        num_cells=40,
+        cell_type="lstm",
+        likelihood_weight=0.0,
+        CRPS_weight=1.0,
+        embedding_dimension=5,
+        validation=False
+    ):
         """
         Train the DeepVAR model with the given hyperparameters.
         """
-        hts_train = self._build_train_ds_multivariate()
-        train_ds = hts_train.to_dataset()
+        if validation:
+            hts_train = self._build_train_ds_multivariate()
+            train_ds = hts_train.to_dataset()
+        else:
+            hts_train = self._build_train_val_ds_multivariate()
+            train_ds = hts_train.to_dataset()
 
         estimator = DeepVARHierarchicalEstimator(
             prediction_length=self.h,
@@ -422,6 +641,9 @@ class DeepVARHierarchical(BaseModel):
             use_feat_dynamic_real=False,
             cardinality=self.stat_cat_cardinalities,
             batch_size=batch_size,
+            num_layers=num_layers,
+            num_cells=num_cells,
+            cell_type=cell_type,
             trainer=Trainer(
                 learning_rate=lr,
                 epochs=epochs,
@@ -430,6 +652,9 @@ class DeepVARHierarchical(BaseModel):
             ),
             target_dim=hts_train.num_ts,
             S=hts_train.S,
+            likelihood_weight=likelihood_weight,
+            CRPS_weight=CRPS_weight,
+            embedding_dimension=embedding_dimension,
         )
 
         model = estimator.train(train_ds)
@@ -437,6 +662,36 @@ class DeepVARHierarchical(BaseModel):
         td = timedelta(seconds=int(time.time() - self.timer_start))
         self.logger.info(f"wall time train {str(td)}")
         return model
+
+    def evaluate(self, model, validation_data):
+        forecast_it, ts_it = make_evaluation_predictions(
+            dataset=validation_data, predictor=model, num_samples=self.n_samples
+        )
+
+        forecasts = list(forecast_it)
+        tss = list(ts_it)
+
+        forecast_means = np.array([f.mean.squeeze() for f in forecasts]).squeeze()
+        true_targets = np.array([ts.values for ts in tss]).squeeze()[-self.h:]
+
+        forecast_df = pd.DataFrame(forecast_means)
+        target_df = pd.DataFrame(true_targets)
+
+        y_train = np.dot(self.groups["train"]["data"], self.S.T)
+
+        if self.groups["train"]["data"].shape[0] < self.seasonality:
+            sp = 1  # non-seasonal case, use a lag of 1
+        else:
+            sp = self.seasonality
+        mase = MeanAbsoluteScaledError(multioutput="raw_values")
+        mase_score = mase(
+            y_true=target_df,
+            y_pred=forecast_df,
+            y_train=y_train,
+            sp=sp,
+        )
+
+        return mase_score.mean()
 
     def predict(self, model):
         timer_start = time.time()
@@ -462,6 +717,17 @@ class DeepVARHierarchical(BaseModel):
 
         self.wall_time_predict = time.time() - timer_start
         return pred_mean, pred_std
+
+    def hyper_tuning(self, n_trials=20, epochs=50):
+        hts_val = self._build_validation_ds_multivariate()
+        val_ds = hts_val.to_dataset()
+
+        hyperparams_optimized, validation_loss = self.optimize_hyperparams(
+            evaluation_function=self.evaluate,
+            validation_data=val_ds,
+            n_trials=n_trials,
+            epochs=epochs,
+        )
 
 
 class TFT(BaseModel):
